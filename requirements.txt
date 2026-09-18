@@ -1,0 +1,14 @@
+# Web app (server.py). No ffmpeg, no torch -- Gemini accepts browser audio
+# formats directly and does the transcription.
+fastapi==0.141.1
+uvicorn==0.53.0
+python-multipart==0.0.32
+google-genai==2.24.0
+
+# The Telegram bot (bot.py + transcriber.py) runs Whisper locally instead and
+# needs a different stack. Install these only if you still want it:
+#   python-telegram-bot==22.8
+#   transformers==5.17.0
+#   torch==2.13.0
+#   numpy==2.5.3
+#   yt-dlp==2026.8.19

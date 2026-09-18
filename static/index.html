@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ဗီဒီယိုမှ စာသား</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --ink: #14181f; --muted: #5b6472;
+    --accent: #2f6f4e; --accent-ink: #fff; --line: #e3e6ea; --danger: #b3261e;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101418; --card: #191f26; --ink: #eef1f5; --muted: #9aa5b1;
+      --accent: #4c9e75; --line: #2a323b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: 'Noto Sans Myanmar', 'Padauk', system-ui, sans-serif;
+    line-height: 1.9; padding: 16px; padding-bottom: 48px;
+  }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 1.45rem; margin: 8px 0 4px; }
+  .sub { color: var(--muted); font-size: .95rem; margin-bottom: 20px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
+  }
+  .label { font-weight: 600; margin-bottom: 10px; display: block; }
+  .langs { display: flex; gap: 10px; }
+  .langs button {
+    flex: 1; min-height: 54px; border-radius: 10px; font-size: 1.05rem;
+    border: 2px solid var(--line); background: transparent; color: var(--ink);
+    font-family: inherit; cursor: pointer;
+  }
+  .langs button[aria-pressed="true"] {
+    border-color: var(--accent); background: var(--accent); color: var(--accent-ink);
+    font-weight: 700;
+  }
+  .drop {
+    border: 2px dashed var(--line); border-radius: 10px; padding: 22px 14px;
+    text-align: center; color: var(--muted); cursor: pointer;
+  }
+  .drop.has-file { border-style: solid; border-color: var(--accent); color: var(--ink); }
+  input[type=file] { display: none; }
+  .row { display: flex; gap: 10px; align-items: center; }
+  button.action {
+    width: 100%; min-height: 64px; border: 0; border-radius: 12px;
+    background: var(--accent); color: var(--accent-ink); font-size: 1.2rem;
+    font-weight: 700; font-family: inherit; cursor: pointer; margin-top: 4px;
+  }
+  button.action[disabled] { opacity: .5; cursor: default; }
+  button.ghost {
+    flex: 1; min-height: 52px; border-radius: 10px; border: 1px solid var(--line);
+    background: transparent; color: var(--ink); font-family: inherit;
+    font-size: 1rem; cursor: pointer;
+  }
+  #rec { background: var(--danger); color: #fff; border: 0; }
+  #rec[data-on="1"] { animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .55; } }
+  #status { margin-top: 12px; color: var(--muted); min-height: 1.5em; font-size: .95rem; }
+  #status.err { color: var(--danger); }
+  textarea {
+    width: 100%; min-height: 200px; border-radius: 10px; padding: 12px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+    font-family: inherit; font-size: 1.1rem; line-height: 2.1; resize: vertical;
+  }
+  .out { display: none; }
+  .out.show { display: block; }
+  .note { color: var(--muted); font-size: .85rem; line-height: 1.7; }
+  .spinner {
+    width: 18px; height: 18px; border: 2px solid currentColor; border-right-color: transparent;
+    border-radius: 50%; display: inline-block; vertical-align: -3px; margin-inline-end: 8px;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<main>
+  <h1>🎙️ အသံမှ စာသားထုတ်ရန်</h1>
+  <p class="sub">အသံ သို့မဟုတ် ဗီဒီယို တင်ပါ — စာသားအဖြစ် ပြောင်းပေးပါမည်။</p>
+
+  <div class="card">
+    <span class="label">၁။ ပြောထားသည့် ဘာသာစကား</span>
+    <div class="langs">
+      <button type="button" data-lang="my" aria-pressed="true">မြန်မာစကား</button>
+      <button type="button" data-lang="en" aria-pressed="false">English</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <span class="label">၂။ အသံ ရွေးပါ</span>
+    <label class="drop" id="drop" for="file">
+      <span id="dropText">ဖိုင် ရွေးရန် နှိပ်ပါ<br><small>အသံ သို့မဟုတ် ဗီဒီယို</small></span>
+    </label>
+    <input type="file" id="file" accept="audio/*,video/*">
+    <div class="row" style="margin-top:10px">
+      <button type="button" class="ghost" id="rec">⏺ အသံ သွင်းရန်</button>
+    </div>
+  </div>
+
+  <button class="action" id="go" disabled>စာသား ထုတ်မည်</button>
+  <div id="status"></div>
+
+  <div class="card out" id="out">
+    <span class="label">ရလဒ် စာသား</span>
+    <textarea id="text" readonly></textarea>
+    <div class="row" style="margin-top:10px">
+      <button type="button" class="ghost" id="copy">📋 ကူးယူ</button>
+      <button type="button" class="ghost" id="dl">📄 ဖိုင်</button>
+      <button type="button" class="ghost" id="tr">🌐 ဘာသာပြန်</button>
+    </div>
+  </div>
+
+  <p class="note">
+    စာသားသည် အလိုအလျောက် ထုတ်ထားခြင်း ဖြစ်၍ အမှားပါနိုင်ပါသည်။ အသုံးမပြုမီ ပြန်စစ်ပါ။<br>
+    အသံဖိုင်များကို သိမ်းဆည်းထားခြင်း မရှိပါ။
+  </p>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let lang = "my", picked = null, recorder = null, chunks = [];
+
+document.querySelectorAll("[data-lang]").forEach((b) => {
+  b.onclick = () => {
+    lang = b.dataset.lang;
+    document.querySelectorAll("[data-lang]").forEach((o) =>
+      o.setAttribute("aria-pressed", String(o === b)));
+  };
+});
+
+function setFile(f, label) {
+  picked = f;
+  $("dropText").innerHTML = label || f.name;
+  $("drop").classList.add("has-file");
+  $("go").disabled = false;
+}
+
+$("file").onchange = (e) => { if (e.target.files[0]) setFile(e.target.files[0]); };
+
+$("rec").onclick = async () => {
+  if (recorder && recorder.state === "recording") {
+    recorder.stop();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    chunks = [];
+    recorder = new MediaRecorder(stream);
+    recorder.ondataavailable = (e) => chunks.push(e.data);
+    recorder.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+      const ext = (recorder.mimeType || "audio/webm").includes("ogg") ? "ogg" : "webm";
+      setFile(new File([blob], `recording.${ext}`, { type: blob.type }),
+              "🎤 အသံသွင်းပြီး (" + Math.round(blob.size / 1024) + " KB)");
+      $("rec").textContent = "⏺ အသံ သွင်းရန်";
+      $("rec").dataset.on = "0";
+    };
+    recorder.start();
+    $("rec").textContent = "⏹ ရပ်ရန်";
+    $("rec").dataset.on = "1";
+    say("");
+  } catch (err) {
+    say("မိုက်ခရိုဖုန်း သုံးခွင့် မရပါ။ ဖိုင်တင်၍ စမ်းကြည့်ပါ။", true);
+  }
+};
+
+function say(msg, isErr) {
+  $("status").innerHTML = msg;
+  $("status").className = isErr ? "err" : "";
+}
+
+const ERRORS = {
+  rate_limited: "တောင်းဆိုမှု များလွန်းပါသည်။ ခဏနေ ပြန်ကြိုးစားပါ။",
+  too_large: "ဖိုင် ကြီးလွန်းပါသည်။",
+  empty_file: "ဖိုင် ဗလာ ဖြစ်နေပါသည်။",
+  empty_transcript: "စာသား မထုတ်နိုင်ပါ။ အသံ ပိုကြည်လင်အောင် ပြန်ကြိုးစားပါ။",
+  transcription_failed: "အမှားတစ်ခု ဖြစ်ပွားပါသည်။ ထပ်မံ ကြိုးစားပါ။",
+};
+
+$("go").onclick = async () => {
+  if (!picked) return;
+  $("go").disabled = true;
+  $("out").classList.remove("show");
+  say('<span class="spinner"></span>စာသား ထုတ်နေပါသည်... ခဏစောင့်ပါ');
+
+  const body = new FormData();
+  body.append("file", picked);
+  body.append("language", lang);
+  try {
+    const res = await fetch("/api/transcribe", { method: "POST", body });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      say(ERRORS[data.detail] || ERRORS.transcription_failed, true);
+    } else {
+      $("text").value = data.text;
+      $("out").classList.add("show");
+      say("ပြီးပါပြီ ✓");
+    }
+  } catch {
+    say("ကွန်ရက် ချိတ်ဆက်မှု မရပါ။", true);
+  }
+  $("go").disabled = false;
+};
+
+$("copy").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($("text").value);
+    $("copy").textContent = "✓ ကူးယူပြီး";
+    setTimeout(() => ($("copy").textContent = "📋 ကူးယူ"), 1500);
+  } catch {
+    $("text").select();
+  }
+};
+
+$("dl").onclick = () => {
+  const url = URL.createObjectURL(new Blob([$("text").value], { type: "text/plain" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = "transcript.txt"; a.click();
+  URL.revokeObjectURL(url);
+};
+
+$("tr").onclick = async () => {
+  const text = $("text").value;
+  const target = lang === "my" ? "en" : "my";
+  const base = `https://translate.google.com/?op=translate&sl=${lang}&tl=${target}`;
+  if (text.length <= 1800) {
+    window.open(`${base}&text=${encodeURIComponent(text)}`, "_blank");
+    return;
+  }
+  try { await navigator.clipboard.writeText(text); } catch {}
+  alert("စာသား ရှည်သဖြင့် ကူးယူထားပါသည်။ Google Translate တွင် ကပ်ထည့်ပါ။");
+  window.open(base, "_blank");
+};
+</script>
+</body>
+</html>
