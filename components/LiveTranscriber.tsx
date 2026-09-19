@@ -52,10 +52,14 @@ export default function LiveTranscriber() {
   const [status, setStatus] = useState<Status>("idle");
   const [language, setLanguage] = useState<Language>("my");
   const [error, setError] = useState<string | null>(null);
-  const [finalText, setFinalText] = useState<string[]>([]);
+  // One editable string (not an array) so the user can fix it freely
+  const [finalText, setFinalText] = useState("");
   const [interimText, setInterimText] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [hasSelection, setHasSelection] = useState(false);
+
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const sessionRef = useRef<Session | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -84,14 +88,14 @@ export default function LiveTranscriber() {
     }
     if (content.inputTranscription?.text) {
       const text = content.inputTranscription.text;
-      setFinalText((prev) => [...prev, text]);
+      setFinalText((prev) => (prev ? `${prev} ${text}` : text));
       setInterimText("");
     }
   }
 
   async function start() {
+    // Keep existing (possibly edited) text; a new recording is appended to it
     setError(null);
-    setFinalText([]);
     setInterimText("");
     setElapsed(0);
     setStatus("connecting");
@@ -219,14 +223,22 @@ export default function LiveTranscriber() {
     }, 5000);
   }
 
+  // Copies the highlighted part if there is one, otherwise everything
   async function copy() {
-    await navigator.clipboard.writeText(finalText.join(" "));
+    const box = textareaRef.current;
+    const selected = box ? finalText.slice(box.selectionStart, box.selectionEnd) : "";
+    await navigator.clipboard.writeText(selected || finalText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
+  function updateSelection() {
+    const box = textareaRef.current;
+    setHasSelection(!!box && box.selectionStart !== box.selectionEnd);
+  }
+
   const busy = status === "connecting" || status === "finishing";
-  const hasText = finalText.length > 0;
+  const hasText = finalText.trim().length > 0;
 
   return (
     <div>
@@ -257,15 +269,30 @@ export default function LiveTranscriber() {
 
       {error && <p role="alert">{error}</p>}
 
-      <p>
-        {finalText.join(" ")}{" "}
-        <span className="text-gray-400">{interimText}</span>
-      </p>
+      {status === "idle" ? (
+        // Stopped: a normal text box — select, delete, retype, copy
+        <textarea
+          ref={textareaRef}
+          value={finalText}
+          onChange={(e) => setFinalText(e.target.value)}
+          onSelect={updateSelection}
+          placeholder="Your transcript will appear here. You can edit it after stopping."
+          className="block w-full min-h-48 border rounded p-2"
+        />
+      ) : (
+        // Recording: read-only, with the live guess in grey
+        <p>
+          {finalText}{" "}
+          <span className="text-gray-400">{interimText}</span>
+        </p>
+      )}
 
       {hasText && status === "idle" && (
         <div>
-          <button onClick={copy}>{copied ? "Copied!" : "Copy"}</button>
-          <button onClick={() => setFinalText([])}>Clear</button>
+          <button onClick={copy}>
+            {copied ? "Copied!" : hasSelection ? "Copy selection" : "Copy all"}
+          </button>
+          <button onClick={() => setFinalText("")}>Clear</button>
         </div>
       )}
     </div>
