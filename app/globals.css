@@ -1,8 +1,18 @@
 @import "tailwindcss";
 
+/* dark: utilities follow the .dark class on <html> (set by the toggle), not the OS */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  color-scheme: light;
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  color-scheme: dark; /* native controls (select menu, scrollbars) match too */
 }
 
 @theme inline {
@@ -11,13 +21,6 @@
   /* Latin letters from Geist, Burmese letters from Noto Sans Myanmar */
   --font-sans: var(--font-geist-sans), var(--font-myanmar), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {

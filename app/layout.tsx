@@ -31,12 +31,24 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+// Runs before the page paints: saved choice, else the system setting.
+// Doing this in React instead would flash the wrong theme on load.
+const themeScript = `try {
+  var t = localStorage.getItem("theme");
+  var dark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.classList.toggle("dark", dark);
+} catch (e) {}`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${notoMyanmar.variable} h-full antialiased`}
+      suppressHydrationWarning // the script above changes <html class> before React loads
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
