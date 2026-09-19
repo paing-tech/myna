@@ -7,14 +7,10 @@ import {
   type LiveServerMessage,
   type Session,
 } from "@google/genai";
+import MediaImport from "@/components/MediaImport";
+import { LANGUAGES, type Language } from "@/lib/languages";
 
 type Status = "idle" | "connecting" | "recording" | "finishing";
-type Language = "my" | "en";
-
-const LANGUAGE_LABELS: Record<Language, string> = {
-  my: "မြန်မာ (Burmese)",
-  en: "English",
-};
 
 // Gemini Live sessions are capped at 10 minutes. Stop 15 s early so the
 // last sentence still has time to come back before Gemini cuts us off.
@@ -58,6 +54,7 @@ export default function LiveTranscriber() {
   const [elapsed, setElapsed] = useState(0);
   const [copied, setCopied] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
+  const [importing, setImporting] = useState(false); // upload/link in progress
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -237,7 +234,12 @@ export default function LiveTranscriber() {
     setHasSelection(!!box && box.selectionStart !== box.selectionEnd);
   }
 
-  const busy = status === "connecting" || status === "finishing";
+  // Imported transcripts go after existing text, separated by a blank line
+  function appendImported(text: string) {
+    setFinalText((prev) => (prev.trim() ? `${prev.trimEnd()}\n\n${text}` : text));
+  }
+
+  const busy = status === "connecting" || status === "finishing" || importing;
   const hasText = finalText.trim().length > 0;
 
   // Same box size whether editable or live, so nothing jumps on Start/Stop
@@ -256,13 +258,13 @@ export default function LiveTranscriber() {
         <select
           value={language}
           onChange={(e) => setLanguage(e.target.value as Language)}
-          disabled={status !== "idle"}
+          disabled={status !== "idle" || importing}
           aria-label="Language"
           className="h-11 rounded-full border border-neutral-300 bg-transparent px-4 text-base disabled:opacity-50 dark:border-neutral-700"
         >
-          {(Object.keys(LANGUAGE_LABELS) as Language[]).map((code) => (
+          {(Object.keys(LANGUAGES) as Language[]).map((code) => (
             <option key={code} value={code}>
-              {LANGUAGE_LABELS[code]}
+              {LANGUAGES[code].label}
             </option>
           ))}
         </select>
@@ -284,6 +286,14 @@ export default function LiveTranscriber() {
         </p>
       )}
 
+      <MediaImport
+        language={language}
+        disabled={status !== "idle"}
+        onBusyChange={setImporting}
+        onText={appendImported}
+        onError={setError}
+      />
+
       {status === "idle" ? (
         // Stopped: a normal text box — select, delete, retype, copy
         <textarea
@@ -291,7 +301,7 @@ export default function LiveTranscriber() {
           value={finalText}
           onChange={(e) => setFinalText(e.target.value)}
           onSelect={updateSelection}
-          placeholder="Press Start and speak. You can edit the text after stopping."
+          placeholder="Press Start and speak, upload a file, or paste a link. You can edit the text here."
           className={`${transcriptBox} resize-none outline-none focus:border-neutral-400 dark:focus:border-neutral-600`}
         />
       ) : (
