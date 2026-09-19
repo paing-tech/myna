@@ -1,3 +1,4 @@
+import { Modality } from "@google/genai";
 import { ai } from "@/lib/gemini";
 
 export async function POST() {
@@ -10,15 +11,14 @@ export async function POST() {
       expireTime,
       newSessionExpireTime,
       liveConnectConstraints: {
-        model: process.env.GEMINI_LIVE_MODEL,  // TODO 2: the live model from env
+        model: process.env.GEMINI_LIVE_MODEL,
         config: {
-          responseModalities: ["TEXT"],
+          responseModalities: [Modality.TEXT],
           inputAudioTranscription: { languageCodes: [] },  // [] = auto-detect
         },
       },
     },
   });
 
-  // TODO 3: return JSON with the token's name to the browser
-  //   hint: Response.json({ ... })
+    return Response.json({ token: token.name });
 }
