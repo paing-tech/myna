@@ -1,4 +1,4 @@
-import { toLanguageCode } from "@/lib/languages";
+import { toLanguageCodes } from "@/lib/languages";
 import { MediaError, downloadLink, errorResponse, extractAudio, parseLink, runJob } from "@/lib/media";
 import { transcribeAudioFile } from "@/lib/transcribe";
 
@@ -9,8 +9,8 @@ export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
 
-    const languageCode = toLanguageCode(body?.language);
-    if (!languageCode) throw new MediaError("Unsupported language", 400);
+    const languageCodes = toLanguageCodes(body?.language);
+    if (!languageCodes) throw new MediaError("Unsupported language", 400);
 
     const url = parseLink(body?.url);
     if (!url) {
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     const text = await runJob(async (dir) => {
       const downloaded = await downloadLink(url, dir);
       const audio = await extractAudio(downloaded, dir);
-      return transcribeAudioFile(audio, languageCode);
+      return transcribeAudioFile(audio, languageCodes);
     });
 
     return Response.json({ text });

@@ -1,19 +1,19 @@
 import { Modality } from "@google/genai";
 import { ai } from "@/lib/gemini";
-import { toLanguageCode } from "@/lib/languages";
+import { toLanguageCodes } from "@/lib/languages";
 
 const MODEL = process.env.GEMINI_LIVE_MODEL ?? "gemini-3.5-transcribe-live";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
-  const languageCode = toLanguageCode(body?.language);
-  if (!languageCode) {
+  const languageCodes = toLanguageCodes(body?.language);
+  if (!languageCodes) {
     return Response.json({ error: "Unsupported language" }, { status: 400 });
   }
 
   const config = {
     responseModalities: [Modality.TEXT],
-    inputAudioTranscription: { languageCodes: [languageCode] },
+    inputAudioTranscription: { languageCodes },
   };
 
   const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();

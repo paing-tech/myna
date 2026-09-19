@@ -6,7 +6,7 @@ import { MediaError } from "@/lib/media";
 const MODEL = process.env.GEMINI_FILE_MODEL ?? "gemini-3.5-transcribe";
 
 // Upload an audio file to Gemini, transcribe it, then delete it from Gemini
-export async function transcribeAudioFile(file: string, languageCode: string): Promise<string> {
+export async function transcribeAudioFile(file: string, languageCodes: string[]): Promise<string> {
   const uploaded = await ai.files.upload({ file, config: { mimeType: "audio/ogg" } });
 
   try {
@@ -24,7 +24,7 @@ export async function transcribeAudioFile(file: string, languageCode: string): P
       model: MODEL,
       input: [{ type: "audio", uri: info.uri, mime_type: "audio/ogg" }],
       generation_config: {
-        transcription_config: { language_codes: [languageCode] },
+        transcription_config: { language_codes: languageCodes },
       },
     });
 

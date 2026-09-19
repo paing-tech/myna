@@ -8,7 +8,7 @@ import {
   type Session,
 } from "@google/genai";
 import MediaImport from "@/components/MediaImport";
-import { LANGUAGES, type Language } from "@/lib/languages";
+import { DEFAULT_LANGUAGE, LANGUAGES, type Language } from "@/lib/languages";
 
 type Status = "idle" | "connecting" | "recording" | "finishing";
 
@@ -46,7 +46,7 @@ function startErrorMessage(err: unknown): string {
 
 export default function LiveTranscriber() {
   const [status, setStatus] = useState<Status>("idle");
-  const [language, setLanguage] = useState<Language>("my");
+  const [language, setLanguage] = useState<Language>(DEFAULT_LANGUAGE);
   const [error, setError] = useState<string | null>(null);
   // One editable string (not an array) so the user can fix it freely
   const [finalText, setFinalText] = useState("");
@@ -221,13 +221,34 @@ export default function LiveTranscriber() {
   }
 
   // Copies the highlighted part if there is one, otherwise everything
-  async function copy() {
+  // The highlighted part if there is one, otherwise everything
+  function chosenText(): string {
     const box = textareaRef.current;
     const selected = box ? finalText.slice(box.selectionStart, box.selectionEnd) : "";
-    await navigator.clipboard.writeText(selected || finalText);
+    return selected || finalText;
+  }
+
+  async function copy() {
+    await navigator.clipboard.writeText(chosenText());
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
+
+  // Opens the phone's / computer's own share sheet (Messenger, Telegram, Viber…)
+  async function share() {
+    try {
+      await navigator.share({ text: chosenText() });
+    } catch (err) {
+      // Closing the share sheet without picking an app isn't an error
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      console.error(err);
+      setError("Couldn't open sharing. Use Copy instead.");
+    }
+  }
+
+  // Not every browser has a share sheet (e.g. Firefox on desktop); hide the button there.
+  // Only rendered after the user has text, so this never runs during server rendering.
+  const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
 
   function updateSelection() {
     const box = textareaRef.current;
@@ -320,6 +341,11 @@ export default function LiveTranscriber() {
           <button onClick={copy} className={secondaryButton}>
             {copied ? "Copied!" : hasSelection ? "Copy selection" : "Copy all"}
           </button>
+          {canShare && (
+            <button onClick={share} className={secondaryButton}>
+              {hasSelection ? "Share selection" : "Share"}
+            </button>
+          )}
           <button onClick={() => setFinalText("")} className={secondaryButton}>
             Clear
           </button>
