@@ -240,34 +240,49 @@ export default function LiveTranscriber() {
   const busy = status === "connecting" || status === "finishing";
   const hasText = finalText.trim().length > 0;
 
+  // Same box size whether editable or live, so nothing jumps on Start/Stop
+  const transcriptBox =
+    "block w-full flex-1 min-h-[40vh] rounded-xl border border-neutral-200 bg-white p-4 " +
+    "text-lg leading-loose whitespace-pre-wrap dark:border-neutral-800 dark:bg-neutral-900";
+
+  const secondaryButton =
+    "h-11 rounded-full border border-neutral-300 px-5 text-sm font-medium " +
+    "hover:bg-neutral-100 active:scale-95 transition dark:border-neutral-700 dark:hover:bg-neutral-800";
+
   return (
-    <div>
-      <select
-        value={language}
-        onChange={(e) => setLanguage(e.target.value as Language)}
-        disabled={status !== "idle"}
-      >
-        {(Object.keys(LANGUAGE_LABELS) as Language[]).map((code) => (
-          <option key={code} value={code}>
-            {LANGUAGE_LABELS[code]}
-          </option>
-        ))}
-      </select>
+    <div className="flex flex-1 flex-col gap-4">
+      {/* Top row: language picker + recording clock */}
+      <div className="flex items-center justify-between gap-3">
+        <select
+          value={language}
+          onChange={(e) => setLanguage(e.target.value as Language)}
+          disabled={status !== "idle"}
+          aria-label="Language"
+          className="h-11 rounded-full border border-neutral-300 bg-transparent px-4 text-base disabled:opacity-50 dark:border-neutral-700"
+        >
+          {(Object.keys(LANGUAGE_LABELS) as Language[]).map((code) => (
+            <option key={code} value={code}>
+              {LANGUAGE_LABELS[code]}
+            </option>
+          ))}
+        </select>
 
-      <button onClick={status === "recording" ? stop : start} disabled={busy}>
-        {status === "idle" && "Start"}
-        {status === "connecting" && "Connecting…"}
-        {status === "recording" && "Stop"}
-        {status === "finishing" && "Finishing…"}
-      </button>
+        {status === "recording" && (
+          <span className="flex items-center gap-2 text-sm tabular-nums text-neutral-500">
+            <span className="size-2.5 animate-pulse rounded-full bg-red-500" />
+            {formatTime(elapsed)} / {formatTime(MAX_SECONDS)}
+          </span>
+        )}
+      </div>
 
-      {status === "recording" && (
-        <span>
-          {formatTime(elapsed)} / {formatTime(MAX_SECONDS)}
-        </span>
+      {error && (
+        <p
+          role="alert"
+          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+        >
+          {error}
+        </p>
       )}
-
-      {error && <p role="alert">{error}</p>}
 
       {status === "idle" ? (
         // Stopped: a normal text box — select, delete, retype, copy
@@ -276,25 +291,53 @@ export default function LiveTranscriber() {
           value={finalText}
           onChange={(e) => setFinalText(e.target.value)}
           onSelect={updateSelection}
-          placeholder="Your transcript will appear here. You can edit it after stopping."
-          className="block w-full min-h-48 border rounded p-2"
+          placeholder="Press Start and speak. You can edit the text after stopping."
+          className={`${transcriptBox} resize-none outline-none focus:border-neutral-400 dark:focus:border-neutral-600`}
         />
       ) : (
         // Recording: read-only, with the live guess in grey
-        <p>
+        <div className={transcriptBox} aria-live="polite">
           {finalText}{" "}
-          <span className="text-gray-400">{interimText}</span>
-        </p>
+          <span className="text-neutral-400">{interimText}</span>
+          {!finalText && !interimText && (
+            <span className="text-neutral-400">Listening…</span>
+          )}
+        </div>
       )}
 
       {hasText && status === "idle" && (
-        <div>
-          <button onClick={copy}>
+        <div className="flex gap-2">
+          <button onClick={copy} className={secondaryButton}>
             {copied ? "Copied!" : hasSelection ? "Copy selection" : "Copy all"}
           </button>
-          <button onClick={() => setFinalText("")}>Clear</button>
+          <button onClick={() => setFinalText("")} className={secondaryButton}>
+            Clear
+          </button>
         </div>
       )}
+
+      {/* Record button sticks to the bottom, within thumb reach on phones */}
+      <div className="sticky bottom-0 -mx-4 flex justify-center bg-background px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <button
+          onClick={status === "recording" ? stop : start}
+          disabled={busy}
+          className={`flex h-14 w-full max-w-xs items-center justify-center gap-3 rounded-full text-base font-semibold shadow-lg transition active:scale-95 disabled:opacity-60 ${
+            status === "recording"
+              ? "bg-red-600 text-white hover:bg-red-700"
+              : "bg-foreground text-background hover:opacity-90"
+          }`}
+        >
+          {status === "recording" ? (
+            <span className="size-3.5 rounded-sm bg-white" />
+          ) : (
+            <span className="size-3.5 rounded-full bg-red-500" />
+          )}
+          {status === "idle" && "Start"}
+          {status === "connecting" && "Connecting…"}
+          {status === "recording" && "Stop"}
+          {status === "finishing" && "Finishing…"}
+        </button>
+      </div>
     </div>
   );
 }
