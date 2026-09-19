@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { PlayIcon, UploadIcon } from "@/components/icons";
 import type { Language } from "@/lib/languages";
 
 const MAX_UPLOAD_BYTES = 500 * 1024 * 1024; // keep in sync with lib/media.ts
@@ -95,11 +96,17 @@ export default function MediaImport({ language, disabled, onBusyChange, onText, 
   }
 
   const inputDisabled = disabled || busy;
+  const iconButton =
+    "flex size-9 shrink-0 items-center justify-center rounded-full transition " +
+    "hover:bg-neutral-100 active:scale-90 disabled:opacity-40 dark:hover:bg-neutral-800";
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-col gap-2 sm:flex-row">
-        {/* Hidden real file input; the styled label opens it */}
+    <div className="flex w-full flex-col items-center gap-2">
+      {/* One pill: upload on the left, link box in the middle, play on the right */}
+      <form
+        onSubmit={handleLink}
+        className="flex h-12 w-full items-center gap-1 rounded-full border border-neutral-300 px-1.5 focus-within:border-neutral-500 dark:border-neutral-700"
+      >
         <input
           ref={fileInputRef}
           type="file"
@@ -112,30 +119,33 @@ export default function MediaImport({ language, disabled, onBusyChange, onText, 
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={inputDisabled}
-          className="h-11 shrink-0 rounded-full border border-neutral-300 px-5 text-sm font-medium transition hover:bg-neutral-100 active:scale-95 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+          aria-label="Upload video or audio"
+          title="Upload video or audio"
+          className={iconButton}
         >
-          Upload video or audio
+          <UploadIcon className="size-5" />
         </button>
 
-        <form onSubmit={handleLink} className="flex flex-1 gap-2">
-          <input
-            type="url"
-            inputMode="url"
-            value={link}
-            onChange={(e) => setLink(e.target.value)}
-            placeholder="Paste a YouTube, TikTok, Facebook or Instagram link"
-            disabled={inputDisabled}
-            className="h-11 min-w-0 flex-1 rounded-full border border-neutral-300 bg-transparent px-4 text-base outline-none focus:border-neutral-500 disabled:opacity-50 dark:border-neutral-700"
-          />
-          <button
-            type="submit"
-            disabled={inputDisabled || !link.trim()}
-            className="h-11 shrink-0 rounded-full bg-foreground px-5 text-sm font-medium text-background transition active:scale-95 disabled:opacity-50"
-          >
-            Go
-          </button>
-        </form>
-      </div>
+        <input
+          type="url"
+          inputMode="url"
+          value={link}
+          onChange={(e) => setLink(e.target.value)}
+          placeholder="Paste a YouTube, TikTok, Facebook or Instagram link"
+          disabled={inputDisabled}
+          className="h-full min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-neutral-400 disabled:opacity-50"
+        />
+
+        <button
+          type="submit"
+          disabled={inputDisabled || !link.trim()}
+          aria-label="Transcribe this link"
+          title="Transcribe this link"
+          className={iconButton}
+        >
+          <PlayIcon className="size-5" />
+        </button>
+      </form>
 
       {phase && (
         <p className="flex items-center gap-2 text-sm text-neutral-500" aria-live="polite">

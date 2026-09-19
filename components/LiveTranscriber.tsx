@@ -7,8 +7,10 @@ import {
   type LiveServerMessage,
   type Session,
 } from "@google/genai";
+import LanguagePicker from "@/components/LanguagePicker";
 import MediaImport from "@/components/MediaImport";
-import { DEFAULT_LANGUAGE, LANGUAGES, type Language } from "@/lib/languages";
+import { MicIcon } from "@/components/icons";
+import { DEFAULT_LANGUAGE, type Language } from "@/lib/languages";
 
 type Status = "idle" | "connecting" | "recording" | "finishing";
 
@@ -272,32 +274,13 @@ export default function LiveTranscriber() {
     "h-11 rounded-full border border-neutral-300 px-5 text-sm font-medium " +
     "hover:bg-neutral-100 active:scale-95 transition dark:border-neutral-700 dark:hover:bg-neutral-800";
 
+  const micLabel =
+    status === "recording" ? "Stop recording" :
+    status === "connecting" ? "Connecting" :
+    status === "finishing" ? "Finishing" : "Start recording";
+
   return (
     <div className="flex flex-1 flex-col gap-4">
-      {/* Top row: language picker + recording clock */}
-      <div className="flex items-center justify-between gap-3">
-        <select
-          value={language}
-          onChange={(e) => setLanguage(e.target.value as Language)}
-          disabled={status !== "idle" || importing}
-          aria-label="Language"
-          className="h-11 rounded-full border border-neutral-300 bg-transparent px-4 text-base disabled:opacity-50 dark:border-neutral-700"
-        >
-          {(Object.keys(LANGUAGES) as Language[]).map((code) => (
-            <option key={code} value={code}>
-              {LANGUAGES[code].label}
-            </option>
-          ))}
-        </select>
-
-        {status === "recording" && (
-          <span className="flex items-center gap-2 text-sm tabular-nums text-neutral-500">
-            <span className="size-2.5 animate-pulse rounded-full bg-red-500" />
-            {formatTime(elapsed)} / {formatTime(MAX_SECONDS)}
-          </span>
-        )}
-      </div>
-
       {error && (
         <p
           role="alert"
@@ -307,14 +290,6 @@ export default function LiveTranscriber() {
         </p>
       )}
 
-      <MediaImport
-        language={language}
-        disabled={status !== "idle"}
-        onBusyChange={setImporting}
-        onText={appendImported}
-        onError={setError}
-      />
-
       {status === "idle" ? (
         // Stopped: a normal text box — select, delete, retype, copy
         <textarea
@@ -322,7 +297,7 @@ export default function LiveTranscriber() {
           value={finalText}
           onChange={(e) => setFinalText(e.target.value)}
           onSelect={updateSelection}
-          placeholder="Press Start and speak, upload a file, or paste a link. You can edit the text here."
+          placeholder="Press the microphone and speak, upload a file, or paste a link. You can edit the text here."
           className={`${transcriptBox} resize-none outline-none focus:border-neutral-400 dark:focus:border-neutral-600`}
         />
       ) : (
@@ -337,7 +312,7 @@ export default function LiveTranscriber() {
       )}
 
       {hasText && status === "idle" && (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={copy} className={secondaryButton}>
             {copied ? "Copied!" : hasSelection ? "Copy selection" : "Copy all"}
           </button>
@@ -352,27 +327,42 @@ export default function LiveTranscriber() {
         </div>
       )}
 
-      {/* Record button sticks to the bottom, within thumb reach on phones */}
-      <div className="sticky bottom-0 -mx-4 flex justify-center bg-background px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      {/* Controls, bottom of the screen and within thumb reach on phones */}
+      <div className="mt-auto flex flex-col items-center gap-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        {status === "recording" && (
+          <span className="flex items-center gap-2 text-sm tabular-nums text-neutral-500">
+            <span className="size-2.5 animate-pulse rounded-full bg-red-500" />
+            {formatTime(elapsed)} / {formatTime(MAX_SECONDS)}
+          </span>
+        )}
+
         <button
           onClick={status === "recording" ? stop : start}
           disabled={busy}
-          className={`flex h-14 w-full max-w-xs items-center justify-center gap-3 rounded-full text-base font-semibold shadow-lg transition active:scale-95 disabled:opacity-60 ${
+          aria-label={micLabel}
+          title={micLabel}
+          className={`flex size-20 items-center justify-center rounded-full transition active:scale-95 disabled:opacity-60 ${
             status === "recording"
-              ? "bg-red-600 text-white hover:bg-red-700"
-              : "bg-foreground text-background hover:opacity-90"
+              ? "animate-pulse bg-red-600 text-white shadow-[0_0_0_10px_rgba(239,68,68,0.18),0_0_36px_10px_rgba(239,68,68,0.5)]"
+              : "bg-foreground text-background shadow-lg hover:opacity-90"
           }`}
         >
-          {status === "recording" ? (
-            <span className="size-3.5 rounded-sm bg-white" />
-          ) : (
-            <span className="size-3.5 rounded-full bg-red-500" />
-          )}
-          {status === "idle" && "Start"}
-          {status === "connecting" && "Connecting…"}
-          {status === "recording" && "Stop"}
-          {status === "finishing" && "Finishing…"}
+          <MicIcon className="size-8" />
         </button>
+
+        <LanguagePicker
+          value={language}
+          onChange={setLanguage}
+          disabled={status !== "idle" || importing}
+        />
+
+        <MediaImport
+          language={language}
+          disabled={status !== "idle"}
+          onBusyChange={setImporting}
+          onText={appendImported}
+          onError={setError}
+        />
       </div>
     </div>
   );
