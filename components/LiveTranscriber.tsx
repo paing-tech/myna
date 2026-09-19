@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   GoogleGenAI,
   type LiveConnectConfig,
@@ -9,12 +9,16 @@ import {
 } from "@google/genai";
 
 type Status = "idle" | "connecting" | "recording" | "finishing";
-type Language = "my" | "en"; // NEW
+type Language = "my" | "en";
 
-const LANGUAGE_LABELS: Record<Language, string> = { // NEW
+const LANGUAGE_LABELS: Record<Language, string> = {
   my: "မြန်မာ (Burmese)",
   en: "English",
 };
+
+// Gemini Live sessions are capped at 10 minutes. Stop 15 s early so the
+// last sentence still has time to come back before Gemini cuts us off.
+const MAX_SECONDS = 10 * 60 - 15;
 
 function toBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -25,17 +29,51 @@ function toBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+// 125 → "2:05"
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+// Turn browser errors into something a user can act on
+function startErrorMessage(err: unknown): string {
+  if (err instanceof DOMException) {
+    if (err.name === "NotAllowedError")
+      return "Microphone access was blocked. Allow it from the address bar and try again.";
+    if (err.name === "NotFoundError") return "No microphone was found.";
+    if (err.name === "NotReadableError")
+      return "The microphone is being used by another app.";
+  }
+  return "Could not start. Check your connection and try again.";
+}
+
 export default function LiveTranscriber() {
   const [status, setStatus] = useState<Status>("idle");
-  const [language, setLanguage] = useState<Language>("my"); // NEW — Burmese by default
+  const [language, setLanguage] = useState<Language>("my");
   const [error, setError] = useState<string | null>(null);
   const [finalText, setFinalText] = useState<string[]>([]);
   const [interimText, setInterimText] = useState("");
+  const [elapsed, setElapsed] = useState(0);
+  const [copied, setCopied] = useState(false);
 
   const sessionRef = useRef<Session | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const workletRef = useRef<AudioWorkletNode | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const finishTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Leaving the page mid-recording must still release the mic and socket
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (finishTimeoutRef.current) clearTimeout(finishTimeoutRef.current);
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      audioContextRef.current?.close();
+      sessionRef.current?.close();
+    };
+  }, []);
 
   function handleMessage(message: LiveServerMessage) {
     const content = message.serverContent;
@@ -55,10 +93,10 @@ export default function LiveTranscriber() {
     setError(null);
     setFinalText([]);
     setInterimText("");
+    setElapsed(0);
     setStatus("connecting");
 
     try {
-      // NEW — tell the server which language; it validates and locks it in
       const res = await fetch("/api/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -78,7 +116,7 @@ export default function LiveTranscriber() {
 
       sessionRef.current = await ai.live.connect({
         model,
-        config, // NEW — exactly what the server locked into the token
+        config,
         callbacks: {
           onmessage: handleMessage,
           onerror: (e) => {
@@ -97,6 +135,12 @@ export default function LiveTranscriber() {
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
       });
       streamRef.current = stream;
+
+      // Fires if the mic is unplugged or the OS revokes it (not on our own stop)
+      stream.getAudioTracks()[0].onended = () => {
+        setError("The microphone was disconnected.");
+        stop();
+      };
 
       const audioContext = new AudioContext({ sampleRate: 16000 });
       audioContextRef.current = audioContext;
@@ -117,12 +161,28 @@ export default function LiveTranscriber() {
         });
       };
 
+      // Clock: measure from a fixed start time, so it never drifts
+      const startedAt = Date.now();
+      timerRef.current = setInterval(() => {
+        const seconds = Math.floor((Date.now() - startedAt) / 1000);
+        setElapsed(seconds);
+        if (seconds >= MAX_SECONDS) {
+          setError("Reached the 10-minute limit. Press Start to continue.");
+          stop();
+        }
+      }, 250);
+
       setStatus("recording");
     } catch (err) {
       console.error(err);
-      setError("Could not start. Check microphone permission and the console.");
+      setError(startErrorMessage(err));
       cleanup();
     }
+  }
+
+  function stopTimer() {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
   }
 
   function stopAudio() {
@@ -135,27 +195,41 @@ export default function LiveTranscriber() {
   }
 
   function cleanup() {
+    stopTimer();
     stopAudio();
+    if (finishTimeoutRef.current) clearTimeout(finishTimeoutRef.current);
+    finishTimeoutRef.current = null;
     sessionRef.current?.close();
     sessionRef.current = null;
     setStatus("idle");
   }
 
   function stop() {
+    // Already stopping (e.g. timer and mic-unplug both fired) → do nothing
+    if (!streamRef.current) return;
+
     const session = sessionRef.current;
+    stopTimer();
     stopAudio();
     session?.sendRealtimeInput({ audioStreamEnd: true });
     setStatus("finishing");
-    setTimeout(() => {
+
+    finishTimeoutRef.current = setTimeout(() => {
       if (sessionRef.current === session) cleanup();
     }, 5000);
   }
 
+  async function copy() {
+    await navigator.clipboard.writeText(finalText.join(" "));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   const busy = status === "connecting" || status === "finishing";
+  const hasText = finalText.length > 0;
 
   return (
     <div>
-      {/* NEW — language picker, locked while a session is running */}
       <select
         value={language}
         onChange={(e) => setLanguage(e.target.value as Language)}
@@ -168,22 +242,32 @@ export default function LiveTranscriber() {
         ))}
       </select>
 
-      <button
-        onClick={status === "recording" ? stop : start}
-        disabled={busy}
-      >
+      <button onClick={status === "recording" ? stop : start} disabled={busy}>
         {status === "idle" && "Start"}
         {status === "connecting" && "Connecting…"}
         {status === "recording" && "Stop"}
         {status === "finishing" && "Finishing…"}
       </button>
 
-      {error && <p>{error}</p>}
+      {status === "recording" && (
+        <span>
+          {formatTime(elapsed)} / {formatTime(MAX_SECONDS)}
+        </span>
+      )}
+
+      {error && <p role="alert">{error}</p>}
 
       <p>
         {finalText.join(" ")}{" "}
         <span className="text-gray-400">{interimText}</span>
       </p>
+
+      {hasText && status === "idle" && (
+        <div>
+          <button onClick={copy}>{copied ? "Copied!" : "Copy"}</button>
+          <button onClick={() => setFinalText([])}>Clear</button>
+        </div>
+      )}
     </div>
   );
 }
