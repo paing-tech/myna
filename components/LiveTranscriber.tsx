@@ -10,7 +10,17 @@ import {
 import LanguagePicker from "@/components/LanguagePicker";
 import MediaPlayer from "@/components/MediaPlayer";
 import TranscriptBox from "@/components/TranscriptBox";
-import { CloseIcon, MicIcon, PlayIcon, UploadIcon } from "@/components/icons";
+import {
+  CheckIcon,
+  CloseIcon,
+  CopyIcon,
+  EraserIcon,
+  ForwardIcon,
+  MicIcon,
+  PlayIcon,
+  UndoIcon,
+  UploadIcon,
+} from "@/components/icons";
 import { useMediaImport } from "@/components/useMediaImport";
 import { DEFAULT_LANGUAGE, type Language } from "@/lib/languages";
 import { findLink, removeLink } from "@/lib/links";
@@ -74,6 +84,9 @@ export default function LiveTranscriber() {
   const [sheet, setSheet] = useState<"collapsed" | "default" | "expanded">("default");
   const [smart, setSmart] = useState(false);
   const dragStartRef = useRef<number | null>(null);
+  const historyRef = useRef<string[]>([]); // previous versions, for undo
+  const lastPushRef = useRef(0);
+  const [canUndo, setCanUndo] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const sessionRef = useRef<Session | null>(null);
@@ -96,8 +109,26 @@ export default function LiveTranscriber() {
 
   // Every change to the transcript goes through here, so the word timings
   // can follow it. "append" adds at the end (live speech), "edit" is the user.
-  function updateText(next: string, mode: "append" | "edit") {
+  // A burst of typing becomes one undo step, rather than one per keystroke
+  function pushHistory(previous: string, force: boolean) {
+    const now = Date.now();
+    if (!force && now - lastPushRef.current < 800) return;
+    lastPushRef.current = now;
+    historyRef.current.push(previous);
+    if (historyRef.current.length > 50) historyRef.current.shift();
+    setCanUndo(true);
+  }
+
+  function undo() {
+    const previous = historyRef.current.pop();
+    if (previous === undefined) return;
+    setCanUndo(historyRef.current.length > 0);
+    updateText(previous, "edit", "none");
+  }
+
+  function updateText(next: string, mode: "append" | "edit", history: "auto" | "force" | "none" = "auto") {
     const previous = textRef.current;
+    if (history !== "none" && previous !== next) pushHistory(previous, history === "force");
     textRef.current = next;
     setFinalText(next);
     setPlayed((current) => {
@@ -118,7 +149,7 @@ export default function LiveTranscriber() {
     if (content.inputTranscription?.text) {
       const text = content.inputTranscription.text;
       const previous = textRef.current;
-      updateText(previous ? `${previous} ${text}` : text, "append");
+      updateText(previous ? `${previous} ${text}` : text, "append", "none");
       setInterimText("");
     }
   }
@@ -293,6 +324,7 @@ export default function LiveTranscriber() {
   // and the media becomes playable with its words highlighted
   function handleImported(result: TranscriptResult) {
     if (played?.mediaUrl?.startsWith("blob:")) URL.revokeObjectURL(played.mediaUrl);
+    pushHistory(finalText, true);
     const previous = finalText.trimEnd();
     const offset = previous ? previous.length + 2 : 0; // the "\n\n" joiner
     const baseText = previous ? `${previous}\n\n${result.text}` : result.text;
@@ -378,9 +410,10 @@ export default function LiveTranscriber() {
   }
   const hasText = finalText.trim().length > 0;
 
-  const secondaryButton =
-    "h-11 rounded-full border border-neutral-300 px-5 text-sm font-medium " +
-    "hover:bg-neutral-100 active:scale-95 transition dark:border-neutral-700 dark:hover:bg-neutral-800";
+  const pillButton =
+    "flex size-12 items-center justify-center rounded-full text-neutral-600 transition " +
+    "hover:bg-neutral-200/70 active:scale-90 disabled:opacity-30 " +
+    "dark:text-neutral-300 dark:hover:bg-neutral-800";
 
   // The round button is the microphone, unless there's a link to run or a
   // transcription in flight — then it runs or cancels that instead of sitting
@@ -412,7 +445,7 @@ export default function LiveTranscriber() {
 
       {/* Centred in the space between the title and the buttons; as it fills
           it grows out from there, until it meets the buttons and scrolls. */}
-      <div className="mt-auto flex flex-col gap-4">
+      <div className="mt-auto flex flex-col gap-1">
         <TranscriptBox
           value={finalText}
           onChange={(next) => updateText(next, "edit")}
@@ -421,7 +454,7 @@ export default function LiveTranscriber() {
           readOnly={status !== "idle"}
           interim={interimText}
           highlight={highlight}
-          placeholder="Press the microphone and speak, upload a file, or paste a YouTube, TikTok, Facebook or Instagram link here."
+          placeholder="Tap to speak, upload media, or paste a link here"
           textareaRef={textareaRef}
           maxHeightClass={sheet === "collapsed" ? "max-h-[72vh]" : "max-h-[55vh]"}
         >
@@ -437,21 +470,38 @@ export default function LiveTranscriber() {
           )}
         </TranscriptBox>
 
-        {hasText && status === "idle" && (
-          <div className="flex flex-wrap gap-2">
-            <button onClick={copy} className={secondaryButton}>
-              {copied ? "Copied!" : hasSelection ? "Copy selection" : "Copy all"}
+        {/* Always rendered, so the row keeps its space and nothing jumps */}
+        <div className="flex justify-end pr-4">
+          <div className="flex items-center gap-1 rounded-full p-1 bg-neutral-50/90 dark:bg-neutral-900/50">
+            <button
+              onClick={() => updateText("", "edit", "force")}
+              disabled={!hasText || status !== "idle"}
+              aria-label="Clear the transcript"
+              title="Clear the transcript"
+              className={pillButton}
+            >
+              <EraserIcon className="size-6" />
             </button>
-            {canShare && (
-              <button onClick={share} className={secondaryButton}>
-                {hasSelection ? "Share selection" : "Share"}
-              </button>
-            )}
-            <button onClick={() => updateText("", "edit")} className={secondaryButton}>
-              Clear
+            <button
+              onClick={undo}
+              disabled={!canUndo || status !== "idle"}
+              aria-label="Undo"
+              title="Undo"
+              className={pillButton}
+            >
+              <UndoIcon className="size-6" />
+            </button>
+            <button
+              onClick={copy}
+              disabled={!hasText}
+              aria-label={hasSelection ? "Copy selection" : "Copy all"}
+              title={copied ? "Copied" : hasSelection ? "Copy selection" : "Copy all"}
+              className={pillButton}
+            >
+              {copied ? <CheckIcon className="size-6" /> : <CopyIcon className="size-6" />}
             </button>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Controls sit in a sheet anchored to the bottom of the screen */}
@@ -459,7 +509,7 @@ export default function LiveTranscriber() {
         {...(sheet === "collapsed"
           ? { onPointerDown: handlePointerDown, onPointerUp: handlePointerUp }
           : {})}
-        className={`sticky bottom-0 -mx-4 mt-4 flex flex-col items-center gap-0 rounded-t-[60px] transition-[padding] duration-300 ${
+        className={`sticky bottom-0 -mx-4 mt-1 flex flex-col items-center gap-0 rounded-t-[60px] transition-[padding] duration-300 ${
           sheet === "collapsed"
             ? "pb-[max(0.5rem,env(safe-area-inset-bottom))]"
             : "pb-[max(4rem,env(safe-area-inset-bottom))]"
@@ -574,8 +624,21 @@ export default function LiveTranscriber() {
             {mainButton.icon}
           </button>
 
-          {/* Balances the upload button, so the mic stays centred */}
-          <span aria-hidden="true" className="size-12" />
+          {canShare ? (
+            <button
+              type="button"
+              onClick={share}
+              disabled={!hasText || status !== "idle"}
+              aria-label={hasSelection ? "Share selection" : "Share transcript"}
+              title={hasSelection ? "Share selection" : "Share transcript"}
+              className="flex size-12 items-center justify-center rounded-full border border-neutral-300 transition hover:bg-neutral-100 active:scale-90 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            >
+              <ForwardIcon className="size-5" />
+            </button>
+          ) : (
+            // No share sheet in this browser: keep the mic centred anyway
+            <span aria-hidden="true" className="size-12" />
+          )}
         </div>
 
         {media.phase && (

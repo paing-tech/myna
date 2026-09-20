@@ -74,7 +74,7 @@ export default function TranscriptBox({
 
   return (
     <div
-      className={`flex flex-col gap-3 border border-neutral-200 bg-background transition-[border-radius,padding] dark:border-neutral-800 ${
+      className={`flex flex-col gap-3 bg-background transition-[border-radius,padding] ${
         tall || children ? "rounded-[28px] p-6" : "rounded-full px-6 py-2.5"
       }`}
     >
