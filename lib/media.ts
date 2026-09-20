@@ -1,7 +1,8 @@
 import "server-only";
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
@@ -85,6 +86,23 @@ export function parseLink(raw: unknown): string | null {
   return allowed ? url.toString() : null;
 }
 
+// YouTube videos are played through YouTube's own embed, so we never
+// download their video track. Returns the video id, or null for other sites.
+export function youtubeId(url: string): string | null {
+  const { hostname, pathname, searchParams } = new URL(url);
+  const host = hostname.toLowerCase().replace(/^www\./, "");
+  let id: string | null = null;
+  if (host === "youtu.be") id = pathname.slice(1);
+  else if (host.endsWith("youtube.com")) {
+    const [, section, value] = pathname.split("/");
+    id = section === "watch" || section === "" ? searchParams.get("v") : value ?? null;
+    if (["shorts", "embed", "live", "v"].includes(section)) id = value ?? null;
+  }
+  return id && /^[A-Za-z0-9_-]{6,20}$/.test(id) ? id : null;
+}
+
+// Audio only: the picture would be ~15× larger, slower to fetch, and often
+// unavailable from these sites. YouTube shows its video through its own embed.
 export async function downloadLink(url: string, dir: string): Promise<string> {
   try {
     await run(
@@ -148,4 +166,50 @@ export async function extractAudio(input: string, dir: string): Promise<string> 
     { timeout: 10 * 60 * 1000, maxBuffer: 10 * 1024 * 1024 },
   );
   return output;
+}
+
+// --- Playback store -------------------------------------------------------
+// A link's audio has to outlive the request so the browser can play it back.
+// Files live in a temp folder, are served by /api/media/[id], and are deleted
+// an hour later.
+const PLAYBACK_DIR = path.join(tmpdir(), "myna-playback");
+const PLAYBACK_TTL_MS = 60 * 60 * 1000;
+
+// Only formats a browser can play, and whose type we can state confidently
+const PLAYBACK_TYPES: Record<string, string> = {
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".ogg": "audio/ogg",
+  ".m4a": "audio/mp4",
+};
+
+// Returns an id like "3f2a….mp4", or null if the format isn't playable
+export async function saveForPlayback(file: string): Promise<string | null> {
+  const ext = path.extname(file).toLowerCase();
+  if (!PLAYBACK_TYPES[ext]) return null;
+  await mkdir(PLAYBACK_DIR, { recursive: true });
+  await removeExpiredPlayback();
+  const id = `${randomUUID().replace(/-/g, "")}${ext}`;
+  await copyFile(file, path.join(PLAYBACK_DIR, id));
+  return id;
+}
+
+// Resolve an id to a path and type, or null. The id shape check is what
+// stops "../../etc/passwd" being used as an id.
+export function playbackFile(id: string): { path: string; type: string } | null {
+  const match = /^[a-f0-9]{32}(\.[a-z0-9]{2,4})$/.exec(id);
+  const type = match ? PLAYBACK_TYPES[match[1]] : undefined;
+  return type ? { path: path.join(PLAYBACK_DIR, id), type } : null;
+}
+
+async function removeExpiredPlayback() {
+  const cutoff = Date.now() - PLAYBACK_TTL_MS;
+  const files = await readdir(PLAYBACK_DIR).catch(() => []);
+  await Promise.all(
+    files.map(async (name) => {
+      const file = path.join(PLAYBACK_DIR, name);
+      const info = await stat(file).catch(() => null);
+      if (info && info.mtimeMs < cutoff) await rm(file, { force: true });
+    }),
+  );
 }

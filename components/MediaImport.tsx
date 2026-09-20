@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { PlayIcon, UploadIcon } from "@/components/icons";
 import type { Language } from "@/lib/languages";
+import type { TranscriptResult } from "@/lib/types";
 
 const MAX_UPLOAD_BYTES = 500 * 1024 * 1024; // keep in sync with lib/media.ts
 
@@ -10,7 +11,7 @@ type Props = {
   language: Language;
   disabled: boolean;
   onBusyChange: (busy: boolean) => void;
-  onText: (text: string) => void;
+  onResult: (result: TranscriptResult) => void;
   onError: (message: string | null) => void;
 };
 
@@ -20,7 +21,7 @@ function uploadFile(
   file: File,
   language: Language,
   onProgress: (percent: number) => void,
-): Promise<string> {
+): Promise<TranscriptResult> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/transcribe/upload?language=${language}`);
@@ -29,11 +30,11 @@ function uploadFile(
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
     };
     xhr.onload = () => {
-      let data: { text?: string; error?: string } = {};
+      let data: Partial<TranscriptResult> & { error?: string } = {};
       try {
         data = JSON.parse(xhr.responseText);
       } catch {}
-      if (xhr.status < 300 && data.text) resolve(data.text);
+      if (xhr.status < 300 && data.text) resolve({ text: data.text, words: data.words ?? [] });
       else reject(new Error(data.error ?? "Upload failed. Please try again."));
     };
     xhr.onerror = () => reject(new Error("Network error during upload."));
@@ -41,18 +42,18 @@ function uploadFile(
   });
 }
 
-export default function MediaImport({ language, disabled, onBusyChange, onText, onError }: Props) {
+export default function MediaImport({ language, disabled, onBusyChange, onResult, onError }: Props) {
   const [phase, setPhase] = useState<string | null>(null); // progress message; null = idle
   const [link, setLink] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const busy = phase !== null;
 
-  async function run(job: () => Promise<string>) {
+  async function run(job: () => Promise<TranscriptResult>) {
     onError(null);
     onBusyChange(true);
     try {
-      onText(await job());
+      onResult(await job());
       setLink("");
     } catch (err) {
       onError(err instanceof Error ? err.message : "Something went wrong.");
@@ -71,11 +72,17 @@ export default function MediaImport({ language, disabled, onBusyChange, onText, 
     }
 
     setPhase("Uploading 0%…");
-    run(() =>
-      uploadFile(file, language, (percent) => {
+    run(async () => {
+      const result = await uploadFile(file, language, (percent) => {
         setPhase(percent < 100 ? `Uploading ${percent}%…` : "Transcribing… this can take a minute or two");
-      }),
-    );
+      });
+      // The browser already has this file, so play it straight from memory
+      return {
+        ...result,
+        mediaUrl: URL.createObjectURL(file),
+        mediaKind: file.type.startsWith("video") ? ("video" as const) : ("audio" as const),
+      };
+    });
   }
 
   function handleLink(e: React.FormEvent) {
@@ -91,7 +98,7 @@ export default function MediaImport({ language, disabled, onBusyChange, onText, 
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.text) throw new Error(data.error ?? "Couldn't transcribe that link.");
-      return data.text as string;
+      return data as TranscriptResult;
     });
   }
 

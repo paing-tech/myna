@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   GoogleGenAI,
   type LiveConnectConfig,
@@ -9,8 +9,11 @@ import {
 } from "@google/genai";
 import LanguagePicker from "@/components/LanguagePicker";
 import MediaImport from "@/components/MediaImport";
+import MediaPlayer from "@/components/MediaPlayer";
+import TranscriptBox from "@/components/TranscriptBox";
 import { MicIcon } from "@/components/icons";
 import { DEFAULT_LANGUAGE, type Language } from "@/lib/languages";
+import type { TranscriptResult } from "@/lib/types";
 
 type Status = "idle" | "connecting" | "recording" | "finishing";
 
@@ -57,6 +60,14 @@ export default function LiveTranscriber() {
   const [copied, setCopied] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
   const [importing, setImporting] = useState(false); // upload/link in progress
+  // Media to play back. `offset` is where its words start inside finalText,
+  // and `baseText` is what the text looked like then: once the user edits,
+  // the timings no longer line up, so highlighting stops.
+  const [played, setPlayed] = useState<
+    (TranscriptResult & { offset: number; baseText: string }) | null
+  >(null);
+  const [playTime, setPlayTime] = useState(0);
+  const seekRef = useRef<(seconds: number) => void>(() => {});
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -257,18 +268,47 @@ export default function LiveTranscriber() {
     setHasSelection(!!box && box.selectionStart !== box.selectionEnd);
   }
 
-  // Imported transcripts go after existing text, separated by a blank line
-  function appendImported(text: string) {
-    setFinalText((prev) => (prev.trim() ? `${prev.trimEnd()}\n\n${text}` : text));
+  // Imported transcripts go after existing text, separated by a blank line,
+  // and the media becomes playable with its words highlighted
+  function handleImported(result: TranscriptResult) {
+    if (played?.mediaUrl?.startsWith("blob:")) URL.revokeObjectURL(played.mediaUrl);
+    const previous = finalText.trimEnd();
+    const offset = previous ? previous.length + 2 : 0; // the "\n\n" joiner
+    const baseText = previous ? `${previous}\n\n${result.text}` : result.text;
+    setFinalText(baseText);
+    setPlayTime(0);
+    setPlayed(result.mediaUrl || result.youtubeId ? { ...result, offset, baseText } : null);
+  }
+
+  function closePlayer() {
+    if (played?.mediaUrl?.startsWith("blob:")) URL.revokeObjectURL(played.mediaUrl);
+    setPlayed(null);
+  }
+
+  // Which characters to highlight right now. Edits switch this off, because
+  // the word positions would no longer match the text.
+  const highlight = useMemo(() => {
+    if (!played || finalText !== played.baseText) return null;
+    let current = null as { start: number; end: number } | null;
+    for (const word of played.words) {
+      if (word.start > playTime) break;
+      current = { start: played.offset + word.startIndex, end: played.offset + word.endIndex };
+    }
+    return current;
+  }, [played, playTime, finalText]);
+
+  // Double-clicking a word jumps playback to it
+  function seekToCaret(caretIndex: number) {
+    if (!played || finalText !== played.baseText) return;
+    const index = caretIndex - played.offset;
+    const word =
+      played.words.find((w) => index >= w.startIndex && index <= w.endIndex) ??
+      [...played.words].reverse().find((w) => w.startIndex <= index);
+    if (word) seekRef.current(word.start);
   }
 
   const busy = status === "connecting" || status === "finishing" || importing;
   const hasText = finalText.trim().length > 0;
-
-  // Same box size whether editable or live, so nothing jumps on Start/Stop
-  const transcriptBox =
-    "block w-full flex-1 min-h-[40vh] rounded-xl border border-neutral-200 bg-white p-4 " +
-    "text-lg leading-loose whitespace-pre-wrap dark:border-neutral-800 dark:bg-neutral-900";
 
   const secondaryButton =
     "h-11 rounded-full border border-neutral-300 px-5 text-sm font-medium " +
@@ -290,26 +330,28 @@ export default function LiveTranscriber() {
         </p>
       )}
 
-      {status === "idle" ? (
-        // Stopped: a normal text box — select, delete, retype, copy
-        <textarea
-          ref={textareaRef}
-          value={finalText}
-          onChange={(e) => setFinalText(e.target.value)}
-          onSelect={updateSelection}
-          placeholder="Press the microphone and speak, upload a file, or paste a link. You can edit the text here."
-          className={`${transcriptBox} resize-none outline-none focus:border-neutral-400 dark:focus:border-neutral-600`}
-        />
-      ) : (
-        // Recording: read-only, with the live guess in grey
-        <div className={transcriptBox} aria-live="polite">
-          {finalText}{" "}
-          <span className="text-neutral-400">{interimText}</span>
-          {!finalText && !interimText && (
-            <span className="text-neutral-400">Listening…</span>
-          )}
-        </div>
-      )}
+      <TranscriptBox
+        value={finalText}
+        onChange={setFinalText}
+        onSelect={updateSelection}
+        onWordClick={seekToCaret}
+        readOnly={status !== "idle"}
+        interim={interimText}
+        highlight={highlight}
+        placeholder="Press the microphone and speak, upload a file, or paste a link. You can edit the text here."
+        textareaRef={textareaRef}
+      >
+        {played && (
+          <MediaPlayer
+            result={played}
+            onTime={setPlayTime}
+            onReady={(seek) => {
+              seekRef.current = seek;
+            }}
+            onClose={closePlayer}
+          />
+        )}
+      </TranscriptBox>
 
       {hasText && status === "idle" && (
         <div className="flex flex-wrap gap-2">
@@ -360,7 +402,7 @@ export default function LiveTranscriber() {
           language={language}
           disabled={status !== "idle"}
           onBusyChange={setImporting}
-          onText={appendImported}
+          onResult={handleImported}
           onError={setError}
         />
       </div>

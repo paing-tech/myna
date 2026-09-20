@@ -25,14 +25,15 @@ export async function POST(request: Request) {
       throw new MediaError("The file is larger than 500 MB.", 413);
     }
 
-    const text = await runJob(async (dir) => {
+    // No playback copy here: the browser already has the file it uploaded
+    const result = await runJob(async (dir) => {
       const input = path.join(dir, "upload");
       await saveUpload(request.body!, input);
       const audio = await extractAudio(input, dir);
       return transcribeAudioFile(audio, languageCodes);
     });
 
-    return Response.json({ text });
+    return Response.json(result);
   } catch (err) {
     return errorResponse(err);
   }
