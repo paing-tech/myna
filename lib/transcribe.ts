@@ -12,6 +12,24 @@ function toSeconds(offset: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+// Gemini reports positions as UTF-8 BYTE offsets. For English they match
+// character positions, but a Burmese or Chinese character is 3 bytes, so the
+// highlight would land ~3× too far along. This maps bytes → string positions.
+function byteToCharIndex(text: string): number[] {
+  const map = new Array<number>(Buffer.byteLength(text, "utf8") + 1);
+  let byte = 0;
+  for (let i = 0; i < text.length; ) {
+    const codePoint = text.codePointAt(i)!;
+    const chars = codePoint > 0xffff ? 2 : 1; // surrogate pair?
+    const bytes = Buffer.byteLength(String.fromCodePoint(codePoint), "utf8");
+    for (let b = 0; b < bytes; b++) map[byte + b] = i;
+    byte += bytes;
+    i += chars;
+  }
+  map[byte] = text.length;
+  return map;
+}
+
 type WordInfo = {
   type?: string;
   text?: string;
@@ -52,10 +70,16 @@ export async function transcribeAudioFile(
       },
     });
 
-    const text = interaction.output_text?.trim();
+    // Offsets refer to the raw text, so trim only after mapping them
+    const raw = interaction.output_text ?? "";
+    const text = raw.trim();
     if (!text) throw new MediaError("No speech was found in that recording.");
+    const leading = raw.length - raw.trimStart().length;
 
     // Timings live in annotations beside the text blocks
+    const byteToChar = byteToCharIndex(raw);
+    const clamp = (byteIndex: number) =>
+      Math.min(Math.max((byteToChar[byteIndex] ?? raw.length) - leading, 0), text.length);
     const words: Word[] = [];
     for (const step of interaction.steps ?? []) {
       // Steps are a union; only message steps carry content blocks
@@ -67,8 +91,8 @@ export async function transcribeAudioFile(
           words.push({
             start: toSeconds(a.start_offset),
             end: toSeconds(a.end_offset),
-            startIndex: a.start_index,
-            endIndex: a.end_index,
+            startIndex: clamp(a.start_index),
+            endIndex: clamp(a.end_index),
           });
         }
       }

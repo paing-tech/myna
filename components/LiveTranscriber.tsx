@@ -13,6 +13,7 @@ import MediaPlayer from "@/components/MediaPlayer";
 import TranscriptBox from "@/components/TranscriptBox";
 import { MicIcon } from "@/components/icons";
 import { DEFAULT_LANGUAGE, type Language } from "@/lib/languages";
+import { remapWords, type Played } from "@/lib/remap";
 import type { TranscriptResult } from "@/lib/types";
 
 type Status = "idle" | "connecting" | "recording" | "finishing";
@@ -63,13 +64,12 @@ export default function LiveTranscriber() {
   // Media to play back. `offset` is where its words start inside finalText,
   // and `baseText` is what the text looked like then: once the user edits,
   // the timings no longer line up, so highlighting stops.
-  const [played, setPlayed] = useState<
-    (TranscriptResult & { offset: number; baseText: string }) | null
-  >(null);
+  const [played, setPlayed] = useState<Played | null>(null);
   const [playTime, setPlayTime] = useState(0);
   const seekRef = useRef<(seconds: number) => void>(() => {});
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const textRef = useRef(""); // latest text, readable from callbacks
 
   const sessionRef = useRef<Session | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -89,6 +89,20 @@ export default function LiveTranscriber() {
     };
   }, []);
 
+  // Every change to the transcript goes through here, so the word timings
+  // can follow it. "append" adds at the end (live speech), "edit" is the user.
+  function updateText(next: string, mode: "append" | "edit") {
+    const previous = textRef.current;
+    textRef.current = next;
+    setFinalText(next);
+    setPlayed((current) => {
+      if (!current || current.baseText !== previous) return current;
+      return mode === "append"
+        ? { ...current, baseText: next } // words are all before the new text
+        : remapWords(current, previous, next);
+    });
+  }
+
   function handleMessage(message: LiveServerMessage) {
     const content = message.serverContent;
     if (!content) return;
@@ -98,7 +112,8 @@ export default function LiveTranscriber() {
     }
     if (content.inputTranscription?.text) {
       const text = content.inputTranscription.text;
-      setFinalText((prev) => (prev ? `${prev} ${text}` : text));
+      const previous = textRef.current;
+      updateText(previous ? `${previous} ${text}` : text, "append");
       setInterimText("");
     }
   }
@@ -275,6 +290,7 @@ export default function LiveTranscriber() {
     const previous = finalText.trimEnd();
     const offset = previous ? previous.length + 2 : 0; // the "\n\n" joiner
     const baseText = previous ? `${previous}\n\n${result.text}` : result.text;
+    textRef.current = baseText;
     setFinalText(baseText);
     setPlayTime(0);
     setPlayed(result.mediaUrl || result.youtubeId ? { ...result, offset, baseText } : null);
@@ -332,7 +348,7 @@ export default function LiveTranscriber() {
 
       <TranscriptBox
         value={finalText}
-        onChange={setFinalText}
+        onChange={(next) => updateText(next, "edit")}
         onSelect={updateSelection}
         onWordClick={seekToCaret}
         readOnly={status !== "idle"}
@@ -363,7 +379,7 @@ export default function LiveTranscriber() {
               {hasSelection ? "Share selection" : "Share"}
             </button>
           )}
-          <button onClick={() => setFinalText("")} className={secondaryButton}>
+          <button onClick={() => updateText("", "edit")} className={secondaryButton}>
             Clear
           </button>
         </div>
