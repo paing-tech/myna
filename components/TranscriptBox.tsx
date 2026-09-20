@@ -14,13 +14,14 @@ type Props = {
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   children?: React.ReactNode; // the player, shown above the text
   maxHeightClass?: string; // how tall the text may grow before it scrolls
+  textClass?: string; // font size and line height, shared by both layers
 };
 
 // One box that is both editable and highlightable. A <textarea> can't colour
 // part of its text, so the text is drawn twice: a mirror underneath shows the
 // words with the highlight, and a see-through textarea on top handles typing,
 // selection and the caret. Both use identical type and box size, so they line up.
-const TEXT = "text-lg leading-loose whitespace-pre-wrap break-words";
+const WRAP = "whitespace-pre-wrap break-words";
 
 export default function TranscriptBox({
   value,
@@ -34,6 +35,7 @@ export default function TranscriptBox({
   textareaRef,
   children,
   maxHeightClass = "max-h-[55vh]",
+  textClass = "text-lg leading-loose",
 }: Props) {
   const mirrorRef = useRef<HTMLDivElement | null>(null);
   const sizerRef = useRef<HTMLDivElement | null>(null);
@@ -68,6 +70,8 @@ export default function TranscriptBox({
     syncScroll();
   });
 
+  const TEXT_STYLE = `${textClass} ${WRAP}`;
+
   const before = highlight ? value.slice(0, highlight.start) : value;
   const marked = highlight ? value.slice(highlight.start, highlight.end) : "";
   const after = highlight ? value.slice(highlight.end) : "";
@@ -83,7 +87,7 @@ export default function TranscriptBox({
       {/* Height comes from the invisible sizer below: the box hugs short text
           and grows with long text, up to max-h, after which the text scrolls. */}
       <div className={`relative ${maxHeightClass} min-h-9 overflow-hidden transition-[max-height] duration-300`}>
-        <div ref={sizerRef} aria-hidden="true" className={`${TEXT} invisible`}>
+        <div ref={sizerRef} aria-hidden="true" className={`${TEXT_STYLE} invisible`}>
           {value || placeholder}
           {interim}
           {"\n"}
@@ -98,13 +102,13 @@ export default function TranscriptBox({
           onDoubleClick={(e) => onWordClick(e.currentTarget.selectionStart)}
           readOnly={readOnly}
           spellCheck={false}
-          className={`${TEXT} absolute inset-0 size-full resize-none bg-transparent text-transparent caret-neutral-900 outline-none dark:caret-white`}
+          className={`${TEXT_STYLE} absolute inset-0 size-full resize-none bg-transparent text-transparent caret-neutral-900 outline-none dark:caret-white`}
         />
         {/* Drawn on top so the words stay readable through a selection */}
         <div
           ref={mirrorRef}
           aria-hidden="true"
-          className={`${TEXT} pointer-events-none absolute inset-0 overflow-hidden`}
+          className={`${TEXT_STYLE} pointer-events-none absolute inset-0 overflow-hidden`}
         >
           {before}
           {marked && (

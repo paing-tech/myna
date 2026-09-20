@@ -28,14 +28,17 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1, // no pinch zoom, so it feels like an app rather than a page
+  userScalable: false,
   viewportFit: "cover",
+  interactiveWidget: "resizes-content", // the on-screen keyboard shrinks the layout
 };
 
 // Runs before the page paints: saved choice, else the system setting.
 // Doing this in React instead would flash the wrong theme on load.
 const themeScript = `try {
   var t = localStorage.getItem("theme");
-  var dark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  var dark = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.classList.toggle("dark", dark);
 } catch (e) {}`;
 
@@ -49,7 +52,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="flex h-dvh flex-col overflow-hidden overscroll-none">{children}</body>
     </html>
   );
 }

@@ -44,7 +44,6 @@ type WordInfo = {
 export async function transcribeAudioFile(
   file: string,
   languageCodes: string[],
-  smart = false,
 ): Promise<{ text: string; words: Word[] }> {
   const uploaded = await ai.files.upload({ file, config: { mimeType: "audio/ogg" } });
 
@@ -65,11 +64,8 @@ export async function transcribeAudioFile(
       generation_config: {
         transcription_config: {
           language_codes: languageCodes,
-          // Smart mode tidies up speech but can't give word timings, so the
-          // highlight-as-it-plays view is only available in verbatim mode.
-          mode: smart
-            ? { type: "smart" as const }
-            : { type: "verbatim" as const, timestamp_granularities: ["word"] },
+          // "word" timings drive the highlight-as-it-plays view
+          mode: { type: "verbatim" as const, timestamp_granularities: ["word"] },
         },
       },
     });

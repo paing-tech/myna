@@ -1,4 +1,4 @@
-import { AudioTranscriptionConfigMode, Modality } from "@google/genai";
+import { Modality } from "@google/genai";
 import { ai } from "@/lib/gemini";
 import { toLanguageCodes } from "@/lib/languages";
 
@@ -13,11 +13,7 @@ export async function POST(request: Request) {
 
   const config = {
     responseModalities: [Modality.TEXT],
-    inputAudioTranscription: {
-      languageCodes,
-      // SMART drops filler words and tidies the text as it goes
-      mode: body?.smart === true ? AudioTranscriptionConfigMode.SMART : undefined,
-    },
+    inputAudioTranscription: { languageCodes },
   };
 
   const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();

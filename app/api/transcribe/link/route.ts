@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     const result = await runJob(async (dir) => {
       const downloaded = await downloadLink(url, dir);
       const audio = await extractAudio(downloaded, dir);
-      const { text, words } = await transcribeAudioFile(audio, languageCodes, body?.smart === true);
+      const { text, words } = await transcribeAudioFile(audio, languageCodes);
 
       if (ytId) return { text, words, mediaKind: "youtube" as const, youtubeId: ytId };
 

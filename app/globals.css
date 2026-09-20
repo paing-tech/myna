@@ -28,3 +28,13 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
 }
+
+/* App-like on a phone: no page scrolling, no rubber-band bounce or
+   pull-to-refresh, and no double-tap zoom. Text areas still scroll inside. */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}

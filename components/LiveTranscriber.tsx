@@ -8,6 +8,8 @@ import {
   type Session,
 } from "@google/genai";
 import LanguagePicker from "@/components/LanguagePicker";
+import AppearancePicker from "@/components/AppearancePicker";
+import TextSizePicker, { TEXT_SIZE_CLASS, useTextSize } from "@/components/TextSizePicker";
 import MediaPlayer from "@/components/MediaPlayer";
 import TranscriptBox from "@/components/TranscriptBox";
 import {
@@ -86,8 +88,8 @@ export default function LiveTranscriber() {
   const textRef = useRef(""); // latest text, readable from callbacks
   // collapsed → just the bar · default → the controls · expanded → plus settings
   const [sheet, setSheet] = useState<"collapsed" | "default" | "expanded">("default");
-  const [smart, setSmart] = useState(false);
   const dragStartRef = useRef<number | null>(null);
+  const textSize = useTextSize();
   const historyRef = useRef<string[]>([]); // previous versions, for undo
   const lastPushRef = useRef(0);
   const [canUndo, setCanUndo] = useState(false);
@@ -170,7 +172,7 @@ export default function LiveTranscriber() {
       const res = await fetch("/api/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ language, smart }),
+        body: JSON.stringify({ language }),
       });
       if (!res.ok) throw new Error(`Token request failed: ${res.status}`);
       const { token, model, config } = (await res.json()) as {
@@ -349,7 +351,6 @@ export default function LiveTranscriber() {
   // this state has to live here rather than inside the input row.
   const media = useMediaImport({
     language,
-    smart,
     onResult: handleImported,
     onError: setError,
   });
@@ -463,6 +464,7 @@ export default function LiveTranscriber() {
           placeholder="Tap to speak, upload media, or paste a link here"
           textareaRef={textareaRef}
           maxHeightClass={sheet === "collapsed" ? "max-h-[72vh]" : "max-h-[55vh]"}
+          textClass={TEXT_SIZE_CLASS[textSize]}
         >
           {played && (
             <MediaPlayer
@@ -546,22 +548,22 @@ export default function LiveTranscriber() {
           }`}
         >
           <div className="overflow-hidden">
-            <div className="mx-auto mb-12 w-full max-w-sm">
-              <label className="flex items-center justify-between gap-4 rounded-2xl border border-neutral-200 px-4 py-3 dark:border-neutral-800">
-                <span>
-                  <span className="block text-sm font-medium">Tidy up speech</span>
-                  <span className="block text-xs text-neutral-500">
-                    Drops “um”, repeats and false starts. Turns off word highlighting.
-                  </span>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={smart}
-                  onChange={(e) => setSmart(e.target.checked)}
-                  disabled={status !== "idle" || importing}
-                  className="size-5 shrink-0 accent-neutral-900 disabled:opacity-40 dark:accent-white"
-                />
-              </label>
+            <div className="mx-auto mb-12 flex w-full max-w-sm flex-col gap-3">
+              <div className="flex items-center justify-between gap-4 px-1 py-2">
+                <span className="text-base font-medium">Appearance</span>
+                <AppearancePicker />
+              </div>
+
+              <div className="flex items-center justify-between gap-4 px-1 py-2">
+                <span className="text-base font-medium">Text size</span>
+                <TextSizePicker />
+              </div>
+
+              {/* Faded divider between the settings and the controls below */}
+              <div
+                aria-hidden="true"
+                className="mt-2 h-px w-full bg-gradient-to-r from-transparent via-neutral-300 to-transparent dark:via-neutral-700"
+              />
             </div>
           </div>
         </div>
