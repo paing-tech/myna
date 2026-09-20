@@ -8,13 +8,14 @@ const MAX_UPLOAD_BYTES = 500 * 1024 * 1024; // keep in sync with lib/media.ts
 
 type Options = {
   language: Language;
+  smart: boolean;
   onResult: (result: TranscriptResult) => void;
   onError: (message: string | null) => void;
 };
 
 // Uploading and link transcription, without any markup: the input row and the
 // main button both drive this, so the state has to live above them.
-export function useMediaImport({ language, onResult, onError }: Options) {
+export function useMediaImport({ language, smart, onResult, onError }: Options) {
   const [phase, setPhase] = useState<string | null>(null); // progress message; null = idle
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -43,7 +44,7 @@ export function useMediaImport({ language, onResult, onError }: Options) {
       // video on a phone connection needs a progress number.
       const xhr = new XMLHttpRequest();
       xhrRef.current = xhr;
-      xhr.open("POST", `/api/transcribe/upload?language=${language}`);
+      xhr.open("POST", `/api/transcribe/upload?language=${language}&smart=${smart ? "1" : "0"}`);
       xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
       xhr.upload.onprogress = (e) => {
         if (!e.lengthComputable) return;
@@ -91,7 +92,7 @@ export function useMediaImport({ language, onResult, onError }: Options) {
       const res = await fetch("/api/transcribe/link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, language }),
+        body: JSON.stringify({ url, language, smart }),
         signal: controller.signal,
       });
       const data = await res.json().catch(() => ({}));

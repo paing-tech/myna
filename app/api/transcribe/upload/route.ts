@@ -16,7 +16,9 @@ export const maxDuration = 600; // seconds; long videos take a while
 // Language comes in the query string: POST /api/transcribe/upload?language=my
 export async function POST(request: Request) {
   try {
-    const languageCodes = toLanguageCodes(new URL(request.url).searchParams.get("language"));
+    const params = new URL(request.url).searchParams;
+    const smart = params.get("smart") === "1";
+    const languageCodes = toLanguageCodes(params.get("language"));
     if (!languageCodes) throw new MediaError("Unsupported language", 400);
     if (!request.body) throw new MediaError("No file was sent.", 400);
 
@@ -30,7 +32,7 @@ export async function POST(request: Request) {
       const input = path.join(dir, "upload");
       await saveUpload(request.body!, input);
       const audio = await extractAudio(input, dir);
-      return transcribeAudioFile(audio, languageCodes);
+      return transcribeAudioFile(audio, languageCodes, smart);
     });
 
     return Response.json(result);

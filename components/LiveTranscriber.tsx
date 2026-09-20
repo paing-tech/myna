@@ -70,7 +70,9 @@ export default function LiveTranscriber() {
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const textRef = useRef(""); // latest text, readable from callbacks
-  const [sheetOpen, setSheetOpen] = useState(true); // controls sheet up or collapsed
+  // collapsed → just the bar · default → the controls · expanded → plus settings
+  const [sheet, setSheet] = useState<"collapsed" | "default" | "expanded">("default");
+  const [smart, setSmart] = useState(false);
   const dragStartRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -127,13 +129,13 @@ export default function LiveTranscriber() {
     setInterimText("");
     setElapsed(0);
     setStatus("connecting");
-    setSheetOpen(true); // Stop must never be hidden behind a collapsed sheet
+    setSheet((current) => (current === "collapsed" ? "default" : current)); // keep Stop reachable
 
     try {
       const res = await fetch("/api/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ language }),
+        body: JSON.stringify({ language, smart }),
       });
       if (!res.ok) throw new Error(`Token request failed: ${res.status}`);
       const { token, model, config } = (await res.json()) as {
@@ -309,6 +311,7 @@ export default function LiveTranscriber() {
   // this state has to live here rather than inside the input row.
   const media = useMediaImport({
     language,
+    smart,
     onResult: handleImported,
     onError: setError,
   });
@@ -340,6 +343,9 @@ export default function LiveTranscriber() {
   // Collapsing is refused while recording, or Stop would be out of reach.
   function handlePointerDown(e: React.PointerEvent) {
     dragStartRef.current = e.clientY;
+    // Without capture, a drag that leaves the handle delivers pointerup
+    // somewhere else and the gesture is lost
+    e.currentTarget.setPointerCapture(e.pointerId);
   }
 
   function handlePointerUp(e: React.PointerEvent) {
@@ -347,9 +353,16 @@ export default function LiveTranscriber() {
     dragStartRef.current = null;
     if (start === null) return;
     const dy = e.clientY - start;
-    const next = Math.abs(dy) < 24 ? !sheetOpen : dy < 0;
-    if (!next && status === "recording") return;
-    setSheetOpen(next);
+    setSheet((current) => {
+      // A short movement is a tap: hide the controls, or bring them back
+      if (Math.abs(dy) < 24) {
+        if (current === "collapsed") return "default";
+        return status === "recording" ? current : "collapsed";
+      }
+      if (dy < 0) return current === "collapsed" ? "default" : "expanded"; // dragged up
+      if (current === "expanded") return "default"; // dragged down
+      return status === "recording" ? current : "collapsed";
+    });
   }
 
   const busy = status === "connecting" || status === "finishing";
@@ -410,7 +423,7 @@ export default function LiveTranscriber() {
           highlight={highlight}
           placeholder="Press the microphone and speak, upload a file, or paste a YouTube, TikTok, Facebook or Instagram link here."
           textareaRef={textareaRef}
-          maxHeightClass={sheetOpen ? "max-h-[55vh]" : "max-h-[72vh]"}
+          maxHeightClass={sheet === "collapsed" ? "max-h-[72vh]" : "max-h-[55vh]"}
         >
           {played && (
             <MediaPlayer
@@ -443,10 +456,13 @@ export default function LiveTranscriber() {
 
       {/* Controls sit in a sheet anchored to the bottom of the screen */}
       <div
+        {...(sheet === "collapsed"
+          ? { onPointerDown: handlePointerDown, onPointerUp: handlePointerUp }
+          : {})}
         className={`sticky bottom-0 -mx-4 mt-4 flex flex-col items-center gap-0 rounded-t-[60px] transition-[padding] duration-300 ${
-          sheetOpen
-            ? "pb-[max(4rem,env(safe-area-inset-bottom))]"
-            : "pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+          sheet === "collapsed"
+            ? "pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+            : "pb-[max(4rem,env(safe-area-inset-bottom))]"
         }  border-t border-neutral-200 bg-neutral-50/90 px-4 pt-2 shadow-[0_-10px_30px_rgba(0,0,0,0.07)] backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-900/80 dark:shadow-[0_-10px_30px_rgba(0,0,0,0.6)]`}
       >
         {/* Grab handle: drag or tap to show and hide the controls */}
@@ -454,17 +470,50 @@ export default function LiveTranscriber() {
           type="button"
           onPointerDown={handlePointerDown}
           onPointerUp={handlePointerUp}
-          aria-expanded={sheetOpen}
-          aria-label={sheetOpen ? "Hide controls" : "Show controls"}
+          aria-expanded={sheet !== "collapsed"}
+          aria-label={
+            sheet === "collapsed"
+              ? "Show controls"
+              : sheet === "default"
+                ? "Drag up for settings, down to hide"
+                : "Hide settings"
+          }
           className="-mt-2 flex w-full touch-none cursor-grab justify-center py-3 active:cursor-grabbing"
         >
           <span className="h-1.5 w-12 rounded-full bg-neutral-300 dark:bg-neutral-700" />
         </button>
 
-        {/* Collapsing animates the rows' height down to nothing */}
+        {/* Settings grow upward, so the buttons below stay exactly where they are */}
         <div
           className={`grid w-full transition-all duration-300 ease-out ${
-            sheetOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+            sheet === "expanded" ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+          }`}
+        >
+          <div className="overflow-hidden">
+            <div className="mx-auto mb-12 w-full max-w-sm">
+              <label className="flex items-center justify-between gap-4 rounded-2xl border border-neutral-200 px-4 py-3 dark:border-neutral-800">
+                <span>
+                  <span className="block text-sm font-medium">Tidy up speech</span>
+                  <span className="block text-xs text-neutral-500">
+                    Drops “um”, repeats and false starts. Turns off word highlighting.
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={smart}
+                  onChange={(e) => setSmart(e.target.checked)}
+                  disabled={status !== "idle" || importing}
+                  className="size-5 shrink-0 accent-neutral-900 disabled:opacity-40 dark:accent-white"
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Collapsing animates the controls' height down to nothing */}
+        <div
+          className={`grid w-full transition-all duration-300 ease-out ${
+            sheet === "collapsed" ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
           }`}
         >
           <div className="flex flex-col items-center gap-10 overflow-hidden">
