@@ -516,7 +516,13 @@ export default function LiveTranscriber() {
             sheet === "collapsed" ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
           }`}
         >
-          <div className="flex flex-col items-center gap-10 overflow-hidden">
+          {/* Clipping is only needed while collapsing; otherwise it would cut
+              off the language menu, which opens above the sheet */}
+          <div
+            className={`flex flex-col items-center gap-10 ${
+              sheet === "collapsed" ? "overflow-hidden" : "overflow-visible"
+            }`}
+          >
         {status === "recording" && (
           <span className="flex items-center gap-2 text-sm tabular-nums text-neutral-500">
             <span className="size-2.5 animate-pulse rounded-full bg-red-500" />
