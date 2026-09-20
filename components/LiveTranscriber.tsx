@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   GoogleGenAI,
   type LiveConnectConfig,
@@ -60,6 +60,10 @@ function startErrorMessage(err: unknown): string {
   }
   return "Could not start. Check your connection and try again.";
 }
+
+// Whether this browser can share never changes while the page is open
+const subscribeNothing = () => () => {};
+const hasShareSheet = () => typeof navigator.share === "function";
 
 export default function LiveTranscriber() {
   const [status, setStatus] = useState<Status>("idle");
@@ -312,8 +316,10 @@ export default function LiveTranscriber() {
   }
 
   // Not every browser has a share sheet (e.g. Firefox on desktop); hide the button there.
-  // Only rendered after the user has text, so this never runs during server rendering.
-  const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+  // Read through useSyncExternalStore so the server and the first client render
+  // agree (false), then it settles to the real answer — otherwise React reports
+  // a hydration mismatch, because Node has a navigator without `share`.
+  const canShare = useSyncExternalStore(subscribeNothing, hasShareSheet, () => false);
 
   function updateSelection() {
     const box = textareaRef.current;
