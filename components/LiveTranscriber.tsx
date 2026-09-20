@@ -440,7 +440,7 @@ export default function LiveTranscriber() {
         };
 
   return (
-    <div className="flex flex-1 flex-col gap-4">
+    <div className="relative flex min-h-0 flex-1 flex-col gap-4">
       {error && (
         <p
           role="alert"
@@ -452,7 +452,9 @@ export default function LiveTranscriber() {
 
       {/* Centred in the space between the title and the buttons; as it fills
           it grows out from there, until it meets the buttons and scrolls. */}
-      <div className="mt-auto flex flex-col gap-1">
+      {/* Centred, so a short transcript sits in view above the sheet while a
+          long one grows down behind it */}
+      <div className="mb-90 mt-auto flex flex-col gap-1">
         <TranscriptBox
           value={finalText}
           onChange={(next) => updateText(next, "edit")}
@@ -463,7 +465,7 @@ export default function LiveTranscriber() {
           highlight={highlight}
           placeholder="Tap to speak, upload media, or paste a link here"
           textareaRef={textareaRef}
-          maxHeightClass={sheet === "collapsed" ? "max-h-[72vh]" : "max-h-[55vh]"}
+          maxHeightClass={sheet === "collapsed" ? "max-h-[72vh]" : "max-h-[38vh]"}
           textClass={TEXT_SIZE_CLASS[textSize]}
         >
           {played && (
@@ -478,9 +480,22 @@ export default function LiveTranscriber() {
           )}
         </TranscriptBox>
 
-        {/* Always rendered, so the row keeps its space and nothing jumps */}
-        <div className="flex justify-end pr-4">
-          <div className="flex items-center gap-1 rounded-full p-1 bg-neutral-50/90 dark:bg-neutral-900/50">
+      </div>
+
+      {/* Controls sit in a sheet anchored to the bottom of the screen */}
+      <div
+        {...(sheet === "collapsed"
+          ? { onPointerDown: handlePointerDown, onPointerUp: handlePointerUp }
+          : {})}
+        className={`absolute inset-x-0 bottom-0 -mx-4 flex flex-col items-center gap-0 rounded-t-[60px] transition-[padding] duration-300 ${
+          sheet === "collapsed"
+            ? "pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+            : "pb-[max(4rem,env(safe-area-inset-bottom))]"
+        }  border-t border-neutral-200 bg-neutral-50/90 px-4 pt-2 shadow-[0_-10px_30px_rgba(0,0,0,0.07)] backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-900/80 dark:shadow-[0_-10px_30px_rgba(0,0,0,0.6)]`}
+      >
+        {/* Floats above the sheet, over the text, with a frosted background */}
+        <div className="absolute -top-18 right-6 z-10">
+          <div className="flex items-center gap-1 rounded-full border border-neutral-200/60 bg-white/40 p-1 shadow-sm backdrop-blur-md dark:border-neutral-700/50 dark:bg-neutral-900/40">
             <button
               onClick={() => updateText("", "edit", "force")}
               disabled={!hasText || status !== "idle"}
@@ -510,19 +525,7 @@ export default function LiveTranscriber() {
             </button>
           </div>
         </div>
-      </div>
 
-      {/* Controls sit in a sheet anchored to the bottom of the screen */}
-      <div
-        {...(sheet === "collapsed"
-          ? { onPointerDown: handlePointerDown, onPointerUp: handlePointerUp }
-          : {})}
-        className={`sticky bottom-0 -mx-4 mt-1 flex flex-col items-center gap-0 rounded-t-[60px] transition-[padding] duration-300 ${
-          sheet === "collapsed"
-            ? "pb-[max(0.5rem,env(safe-area-inset-bottom))]"
-            : "pb-[max(4rem,env(safe-area-inset-bottom))]"
-        }  border-t border-neutral-200 bg-neutral-50/90 px-4 pt-2 shadow-[0_-10px_30px_rgba(0,0,0,0.07)] backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-900/80 dark:shadow-[0_-10px_30px_rgba(0,0,0,0.6)]`}
-      >
         {/* Grab handle: drag or tap to show and hide the controls */}
         <button
           type="button"
