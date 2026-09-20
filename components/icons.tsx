@@ -34,9 +34,17 @@ export function UploadIcon({ className }: IconProps) {
 
 export function PlayIcon({ className }: IconProps) {
   return (
-    <svg {...base} className={className}>
-      <path d="M9 9.003a1 1 0 0 1 1.517-.859l4.997 2.997a1 1 0 0 1 0 1.718l-4.997 2.997A1 1 0 0 1 9 14.996z" />
-      <circle cx="12" cy="12" r="10" />
+    <svg {...base} strokeWidth={2} className={className}>
+      <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
+    </svg>
+  );
+}
+
+export function CloseIcon({ className }: IconProps) {
+  return (
+    <svg {...base} strokeWidth={2} className={className}>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
     </svg>
   );
 }

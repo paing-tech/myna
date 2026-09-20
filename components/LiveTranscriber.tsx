@@ -8,11 +8,12 @@ import {
   type Session,
 } from "@google/genai";
 import LanguagePicker from "@/components/LanguagePicker";
-import MediaImport from "@/components/MediaImport";
 import MediaPlayer from "@/components/MediaPlayer";
 import TranscriptBox from "@/components/TranscriptBox";
-import { MicIcon } from "@/components/icons";
+import { CloseIcon, MicIcon, PlayIcon, UploadIcon } from "@/components/icons";
+import { useMediaImport } from "@/components/useMediaImport";
 import { DEFAULT_LANGUAGE, type Language } from "@/lib/languages";
+import { findLink, removeLink } from "@/lib/links";
 import { remapWords, type Played } from "@/lib/remap";
 import type { TranscriptResult } from "@/lib/types";
 
@@ -60,7 +61,6 @@ export default function LiveTranscriber() {
   const [elapsed, setElapsed] = useState(0);
   const [copied, setCopied] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
-  const [importing, setImporting] = useState(false); // upload/link in progress
   // Media to play back. `offset` is where its words start inside finalText,
   // and `baseText` is what the text looked like then: once the user edits,
   // the timings no longer line up, so highlighting stops.
@@ -70,6 +70,7 @@ export default function LiveTranscriber() {
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const textRef = useRef(""); // latest text, readable from callbacks
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const sessionRef = useRef<Session | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -301,6 +302,15 @@ export default function LiveTranscriber() {
     setPlayed(null);
   }
 
+  // Uploading and link transcription. The main button drives the link, so
+  // this state has to live here rather than inside the input row.
+  const media = useMediaImport({
+    language,
+    onResult: handleImported,
+    onError: setError,
+  });
+  const importing = media.busy;
+
   // Which characters to highlight right now. Edits switch this off, because
   // the word positions would no longer match the text.
   const highlight = useMemo(() => {
@@ -323,17 +333,39 @@ export default function LiveTranscriber() {
     if (word) seekRef.current(word.start);
   }
 
-  const busy = status === "connecting" || status === "finishing" || importing;
+  const busy = status === "connecting" || status === "finishing";
+
+  // A link pasted into the transcript is an instruction, not text to keep:
+  // the button runs it, and it leaves the transcript when it does.
+  const pastedLink = useMemo(() => findLink(finalText), [finalText]);
+
+  function runPastedLink() {
+    if (!pastedLink) return;
+    updateText(removeLink(finalText, pastedLink.start, pastedLink.end), "edit");
+    media.transcribeLink(pastedLink.url);
+  }
   const hasText = finalText.trim().length > 0;
 
   const secondaryButton =
     "h-11 rounded-full border border-neutral-300 px-5 text-sm font-medium " +
     "hover:bg-neutral-100 active:scale-95 transition dark:border-neutral-700 dark:hover:bg-neutral-800";
 
-  const micLabel =
-    status === "recording" ? "Stop recording" :
-    status === "connecting" ? "Connecting" :
-    status === "finishing" ? "Finishing" : "Start recording";
+  // The round button is the microphone, unless there's a link to run or a
+  // transcription in flight — then it runs or cancels that instead of sitting
+  // there greyed out.
+  const mainButton = importing
+    ? { label: "Cancel", icon: <CloseIcon className="size-8" />, onClick: media.cancel, tone: "busy" as const }
+    : pastedLink && status === "idle"
+      ? { label: "Transcribe this link", icon: <PlayIcon className="size-8" />, onClick: runPastedLink, tone: "idle" as const }
+      : {
+          label:
+            status === "recording" ? "Stop recording" :
+            status === "connecting" ? "Connecting" :
+            status === "finishing" ? "Finishing" : "Start recording",
+          icon: <MicIcon className="size-8" />,
+          onClick: status === "recording" ? stop : start,
+          tone: status === "recording" ? ("recording" as const) : ("idle" as const),
+        };
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -346,47 +378,51 @@ export default function LiveTranscriber() {
         </p>
       )}
 
-      <TranscriptBox
-        value={finalText}
-        onChange={(next) => updateText(next, "edit")}
-        onSelect={updateSelection}
-        onWordClick={seekToCaret}
-        readOnly={status !== "idle"}
-        interim={interimText}
-        highlight={highlight}
-        placeholder="Press the microphone and speak, upload a file, or paste a link. You can edit the text here."
-        textareaRef={textareaRef}
-      >
-        {played && (
-          <MediaPlayer
-            result={played}
-            onTime={setPlayTime}
-            onReady={(seek) => {
-              seekRef.current = seek;
-            }}
-            onClose={closePlayer}
-          />
-        )}
-      </TranscriptBox>
-
-      {hasText && status === "idle" && (
-        <div className="flex flex-wrap gap-2">
-          <button onClick={copy} className={secondaryButton}>
-            {copied ? "Copied!" : hasSelection ? "Copy selection" : "Copy all"}
-          </button>
-          {canShare && (
-            <button onClick={share} className={secondaryButton}>
-              {hasSelection ? "Share selection" : "Share"}
-            </button>
+      {/* Centred in the space between the title and the buttons; as it fills
+          it grows out from there, until it meets the buttons and scrolls. */}
+      <div className="mt-auto flex flex-col gap-4">
+        <TranscriptBox
+          value={finalText}
+          onChange={(next) => updateText(next, "edit")}
+          onSelect={updateSelection}
+          onWordClick={seekToCaret}
+          readOnly={status !== "idle"}
+          interim={interimText}
+          highlight={highlight}
+          placeholder="Press the microphone and speak, upload a file, or paste a YouTube, TikTok, Facebook or Instagram link here."
+          textareaRef={textareaRef}
+        >
+          {played && (
+            <MediaPlayer
+              result={played}
+              onTime={setPlayTime}
+              onReady={(seek) => {
+                seekRef.current = seek;
+              }}
+              onClose={closePlayer}
+            />
           )}
-          <button onClick={() => updateText("", "edit")} className={secondaryButton}>
-            Clear
-          </button>
-        </div>
-      )}
+        </TranscriptBox>
+
+        {hasText && status === "idle" && (
+          <div className="flex flex-wrap gap-2">
+            <button onClick={copy} className={secondaryButton}>
+              {copied ? "Copied!" : hasSelection ? "Copy selection" : "Copy all"}
+            </button>
+            {canShare && (
+              <button onClick={share} className={secondaryButton}>
+                {hasSelection ? "Share selection" : "Share"}
+              </button>
+            )}
+            <button onClick={() => updateText("", "edit")} className={secondaryButton}>
+              Clear
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Controls, bottom of the screen and within thumb reach on phones */}
-      <div className="mt-auto flex flex-col items-center gap-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <div className="flex flex-col items-center gap-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {status === "recording" && (
           <span className="flex items-center gap-2 text-sm tabular-nums text-neutral-500">
             <span className="size-2.5 animate-pulse rounded-full bg-red-500" />
@@ -394,33 +430,61 @@ export default function LiveTranscriber() {
           </span>
         )}
 
-        <button
-          onClick={status === "recording" ? stop : start}
-          disabled={busy}
-          aria-label={micLabel}
-          title={micLabel}
-          className={`flex size-20 items-center justify-center rounded-full transition active:scale-95 disabled:opacity-60 ${
-            status === "recording"
-              ? "animate-pulse bg-red-600 text-white shadow-[0_0_0_10px_rgba(239,68,68,0.18),0_0_36px_10px_rgba(239,68,68,0.5)]"
-              : "bg-foreground text-background shadow-lg hover:opacity-90"
-          }`}
-        >
-          <MicIcon className="size-8" />
-        </button>
-
         <LanguagePicker
           value={language}
           onChange={setLanguage}
           disabled={status !== "idle" || importing}
         />
 
-        <MediaImport
-          language={language}
-          disabled={status !== "idle"}
-          onBusyChange={setImporting}
-          onResult={handleImported}
-          onError={setError}
-        />
+        <div className="flex items-center gap-5">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="video/*,audio/*"
+            className="hidden"
+            onChange={(e) => {
+              media.pickFile(e.target.files?.[0]);
+              e.target.value = ""; // allow picking the same file again
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={status !== "idle" || importing}
+            aria-label="Upload video or audio"
+            title="Upload video or audio"
+            className="flex size-12 items-center justify-center rounded-full border border-neutral-300 transition hover:bg-neutral-100 active:scale-90 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
+          >
+            <UploadIcon className="size-5" />
+          </button>
+
+          <button
+            onClick={mainButton.onClick}
+            disabled={busy}
+            aria-label={mainButton.label}
+            title={mainButton.label}
+            className={`flex size-20 items-center justify-center rounded-full transition active:scale-95 disabled:opacity-60 ${
+              mainButton.tone === "recording"
+                ? "animate-pulse bg-red-600 text-white shadow-[0_0_0_10px_rgba(239,68,68,0.18),0_0_36px_10px_rgba(239,68,68,0.5)]"
+                : mainButton.tone === "busy"
+                  ? "border border-neutral-300 text-neutral-600 dark:border-neutral-700 dark:text-neutral-300"
+                  : "bg-foreground text-background shadow-lg hover:opacity-90"
+            }`}
+          >
+            {mainButton.icon}
+          </button>
+
+          {/* Balances the upload button, so the mic stays centred */}
+          <span aria-hidden="true" className="size-12" />
+        </div>
+
+        {media.phase && (
+          <p className="flex items-center gap-2 text-center text-sm text-neutral-500" aria-live="polite">
+            <span className="size-3 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent" />
+            {media.phase}
+          </p>
+        )}
+
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Props = {
   value: string;
@@ -34,6 +34,19 @@ export default function TranscriptBox({
   children,
 }: Props) {
   const mirrorRef = useRef<HTMLDivElement | null>(null);
+  const sizerRef = useRef<HTMLDivElement | null>(null);
+  // One line → a rounded pill like a search box; more → a panel with square-ish corners
+  const [tall, setTall] = useState(false);
+
+  useEffect(() => {
+    const sizer = sizerRef.current;
+    if (!sizer) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setTall(entry.contentRect.height > 44); // taller than a single line
+    });
+    observer.observe(sizer);
+    return () => observer.disconnect();
+  }, []);
 
   // Scroll the mirror in step with the textarea
   function syncScroll() {
@@ -58,10 +71,22 @@ export default function TranscriptBox({
   const after = highlight ? value.slice(highlight.end) : "";
 
   return (
-    <div className="flex min-h-[45vh] flex-1 flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+    <div
+      className={`flex flex-col gap-3 border border-neutral-200 bg-background transition-[border-radius,padding] dark:border-neutral-800 ${
+        tall || children ? "rounded-[28px] p-6" : "rounded-full px-6 py-2.5"
+      }`}
+    >
       {children}
 
-      <div className="relative min-h-32 flex-1">
+      {/* Height comes from the invisible sizer below: the box hugs short text
+          and grows with long text, up to max-h, after which the text scrolls. */}
+      <div className="relative max-h-[55vh] min-h-9 overflow-hidden">
+        <div ref={sizerRef} aria-hidden="true" className={`${TEXT} invisible`}>
+          {value || placeholder}
+          {interim}
+          {"\n"}
+        </div>
+
         <textarea
           ref={textareaRef}
           value={value}
