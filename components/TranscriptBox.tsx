@@ -13,6 +13,7 @@ type Props = {
   placeholder: string;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   children?: React.ReactNode; // the player, shown above the text
+  maxHeightClass?: string; // how tall the text may grow before it scrolls
 };
 
 // One box that is both editable and highlightable. A <textarea> can't colour
@@ -32,6 +33,7 @@ export default function TranscriptBox({
   placeholder,
   textareaRef,
   children,
+  maxHeightClass = "max-h-[55vh]",
 }: Props) {
   const mirrorRef = useRef<HTMLDivElement | null>(null);
   const sizerRef = useRef<HTMLDivElement | null>(null);
@@ -80,7 +82,7 @@ export default function TranscriptBox({
 
       {/* Height comes from the invisible sizer below: the box hugs short text
           and grows with long text, up to max-h, after which the text scrolls. */}
-      <div className="relative max-h-[55vh] min-h-9 overflow-hidden">
+      <div className={`relative ${maxHeightClass} min-h-9 overflow-hidden transition-[max-height] duration-300`}>
         <div ref={sizerRef} aria-hidden="true" className={`${TEXT} invisible`}>
           {value || placeholder}
           {interim}

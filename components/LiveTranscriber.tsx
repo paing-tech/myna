@@ -70,6 +70,8 @@ export default function LiveTranscriber() {
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const textRef = useRef(""); // latest text, readable from callbacks
+  const [sheetOpen, setSheetOpen] = useState(true); // controls sheet up or collapsed
+  const dragStartRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const sessionRef = useRef<Session | null>(null);
@@ -125,6 +127,7 @@ export default function LiveTranscriber() {
     setInterimText("");
     setElapsed(0);
     setStatus("connecting");
+    setSheetOpen(true); // Stop must never be hidden behind a collapsed sheet
 
     try {
       const res = await fetch("/api/token", {
@@ -333,6 +336,22 @@ export default function LiveTranscriber() {
     if (word) seekRef.current(word.start);
   }
 
+  // The handle: drag up to open, drag down to collapse, tap to toggle.
+  // Collapsing is refused while recording, or Stop would be out of reach.
+  function handlePointerDown(e: React.PointerEvent) {
+    dragStartRef.current = e.clientY;
+  }
+
+  function handlePointerUp(e: React.PointerEvent) {
+    const start = dragStartRef.current;
+    dragStartRef.current = null;
+    if (start === null) return;
+    const dy = e.clientY - start;
+    const next = Math.abs(dy) < 24 ? !sheetOpen : dy < 0;
+    if (!next && status === "recording") return;
+    setSheetOpen(next);
+  }
+
   const busy = status === "connecting" || status === "finishing";
 
   // A link pasted into the transcript is an instruction, not text to keep:
@@ -391,6 +410,7 @@ export default function LiveTranscriber() {
           highlight={highlight}
           placeholder="Press the microphone and speak, upload a file, or paste a YouTube, TikTok, Facebook or Instagram link here."
           textareaRef={textareaRef}
+          maxHeightClass={sheetOpen ? "max-h-[55vh]" : "max-h-[72vh]"}
         >
           {played && (
             <MediaPlayer
@@ -422,9 +442,32 @@ export default function LiveTranscriber() {
       </div>
 
       {/* Controls sit in a sheet anchored to the bottom of the screen */}
-      <div className="sticky bottom-0 -mx-4 mt-4 flex flex-col items-center gap-10 rounded-t-[60px] border-t border-neutral-200 bg-neutral-50/90 px-4 pt-5 pb-[max(4rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(0,0,0,0.07)] backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-900/80 dark:shadow-[0_-10px_30px_rgba(0,0,0,0.6)]">
-        {/* Grab handle, as on a phone sheet */}
-        <span aria-hidden="true" className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
+      <div
+        className={`sticky bottom-0 -mx-4 mt-4 flex flex-col items-center gap-0 rounded-t-[60px] transition-[padding] duration-300 ${
+          sheetOpen
+            ? "pb-[max(4rem,env(safe-area-inset-bottom))]"
+            : "pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+        }  border-t border-neutral-200 bg-neutral-50/90 px-4 pt-2 shadow-[0_-10px_30px_rgba(0,0,0,0.07)] backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-900/80 dark:shadow-[0_-10px_30px_rgba(0,0,0,0.6)]`}
+      >
+        {/* Grab handle: drag or tap to show and hide the controls */}
+        <button
+          type="button"
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          aria-expanded={sheetOpen}
+          aria-label={sheetOpen ? "Hide controls" : "Show controls"}
+          className="-mt-2 flex w-full touch-none cursor-grab justify-center py-3 active:cursor-grabbing"
+        >
+          <span className="h-1.5 w-12 rounded-full bg-neutral-300 dark:bg-neutral-700" />
+        </button>
+
+        {/* Collapsing animates the rows' height down to nothing */}
+        <div
+          className={`grid w-full transition-all duration-300 ease-out ${
+            sheetOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+          }`}
+        >
+          <div className="flex flex-col items-center gap-10 overflow-hidden">
         {status === "recording" && (
           <span className="flex items-center gap-2 text-sm tabular-nums text-neutral-500">
             <span className="size-2.5 animate-pulse rounded-full bg-red-500" />
@@ -486,7 +529,8 @@ export default function LiveTranscriber() {
             {media.phase}
           </p>
         )}
-
+          </div>
+        </div>
       </div>
     </div>
   );
