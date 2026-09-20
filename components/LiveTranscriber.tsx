@@ -354,15 +354,15 @@ export default function LiveTranscriber() {
   // transcription in flight — then it runs or cancels that instead of sitting
   // there greyed out.
   const mainButton = importing
-    ? { label: "Cancel", icon: <CloseIcon className="size-8" />, onClick: media.cancel, tone: "busy" as const }
+    ? { label: "Cancel", icon: <CloseIcon className="size-10" />, onClick: media.cancel, tone: "busy" as const }
     : pastedLink && status === "idle"
-      ? { label: "Transcribe this link", icon: <PlayIcon className="size-8" />, onClick: runPastedLink, tone: "idle" as const }
+      ? { label: "Transcribe this link", icon: <PlayIcon className="size-10" />, onClick: runPastedLink, tone: "idle" as const }
       : {
           label:
             status === "recording" ? "Stop recording" :
             status === "connecting" ? "Connecting" :
             status === "finishing" ? "Finishing" : "Start recording",
-          icon: <MicIcon className="size-8" />,
+          icon: <MicIcon className="size-10" />,
           onClick: status === "recording" ? stop : start,
           tone: status === "recording" ? ("recording" as const) : ("idle" as const),
         };
@@ -421,8 +421,10 @@ export default function LiveTranscriber() {
         )}
       </div>
 
-      {/* Controls, bottom of the screen and within thumb reach on phones */}
-      <div className="flex flex-col items-center gap-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      {/* Controls sit in a sheet anchored to the bottom of the screen */}
+      <div className="sticky bottom-0 -mx-4 mt-4 flex flex-col items-center gap-10 rounded-t-[60px] border-t border-neutral-200 bg-neutral-50/90 px-4 pt-5 pb-[max(4rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(0,0,0,0.07)] backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-900/80 dark:shadow-[0_-10px_30px_rgba(0,0,0,0.6)]">
+        {/* Grab handle, as on a phone sheet */}
+        <span aria-hidden="true" className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
         {status === "recording" && (
           <span className="flex items-center gap-2 text-sm tabular-nums text-neutral-500">
             <span className="size-2.5 animate-pulse rounded-full bg-red-500" />
@@ -463,7 +465,7 @@ export default function LiveTranscriber() {
             disabled={busy}
             aria-label={mainButton.label}
             title={mainButton.label}
-            className={`flex size-20 items-center justify-center rounded-full transition active:scale-95 disabled:opacity-60 ${
+            className={`flex size-28 items-center justify-center rounded-full transition active:scale-95 disabled:opacity-60 ${
               mainButton.tone === "recording"
                 ? "animate-pulse bg-red-600 text-white shadow-[0_0_0_10px_rgba(239,68,68,0.18),0_0_36px_10px_rgba(239,68,68,0.5)]"
                 : mainButton.tone === "busy"
