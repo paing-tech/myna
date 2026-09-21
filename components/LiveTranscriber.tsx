@@ -15,6 +15,7 @@ import TranscriptBox from "@/components/TranscriptBox";
 import {
   CheckIcon,
   CloseIcon,
+  EjectIcon,
   CopyIcon,
   EraserIcon,
   ForwardIcon,
@@ -25,7 +26,7 @@ import {
 } from "@/components/icons";
 import { useMediaImport } from "@/components/useMediaImport";
 import { DEFAULT_LANGUAGE, type Language } from "@/lib/languages";
-import { findLink, removeLink } from "@/lib/links";
+import { findLink } from "@/lib/links";
 import { remapWords, type Played } from "@/lib/remap";
 import type { TranscriptResult } from "@/lib/types";
 
@@ -34,6 +35,9 @@ type Status = "idle" | "connecting" | "recording" | "finishing";
 // Gemini Live sessions are capped at 10 minutes. Stop 15 s early so the
 // last sentence still has time to come back before Gemini cuts us off.
 const MAX_SECONDS = 10 * 60 - 15;
+
+// Circumference of the progress ring drawn around the record button
+const RING = 2 * Math.PI * 46;
 
 function toBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -332,17 +336,20 @@ export default function LiveTranscriber() {
   // and the media becomes playable with its words highlighted
   function handleImported(result: TranscriptResult) {
     if (played?.mediaUrl?.startsWith("blob:")) URL.revokeObjectURL(played.mediaUrl);
+    // Media replaces the transcript rather than joining it, so the two never
+    // mix. Undo brings the previous text back.
     pushHistory(finalText, true);
-    const previous = finalText.trimEnd();
-    const offset = previous ? previous.length + 2 : 0; // the "\n\n" joiner
-    const baseText = previous ? `${previous}\n\n${result.text}` : result.text;
-    textRef.current = baseText;
-    setFinalText(baseText);
+    textRef.current = result.text;
+    setFinalText(result.text);
     setPlayTime(0);
-    setPlayed(result.mediaUrl || result.youtubeId ? { ...result, offset, baseText } : null);
+    setPlayed(
+      result.mediaUrl || result.youtubeId ? { ...result, offset: 0, baseText: result.text } : null,
+    );
   }
 
-  function closePlayer() {
+  // Eject closes the player and keeps the words. The button goes back to the
+  // microphone, and a new recording or import replaces the text.
+  function ejectMedia() {
     if (played?.mediaUrl?.startsWith("blob:")) URL.revokeObjectURL(played.mediaUrl);
     setPlayed(null);
   }
@@ -412,7 +419,8 @@ export default function LiveTranscriber() {
 
   function runPastedLink() {
     if (!pastedLink) return;
-    updateText(removeLink(finalText, pastedLink.start, pastedLink.end), "edit");
+    // Clear the box while it works; the transcript replaces it when it lands
+    updateText("", "edit", "force");
     media.transcribeLink(pastedLink.url);
   }
   const hasText = finalText.trim().length > 0;
@@ -427,6 +435,8 @@ export default function LiveTranscriber() {
   // there greyed out.
   const mainButton = importing
     ? { label: "Cancel", icon: <CloseIcon className="size-10" />, onClick: media.cancel, tone: "busy" as const }
+    : played && status === "idle"
+      ? { label: "Close this media", icon: <EjectIcon className="size-10" />, onClick: ejectMedia, tone: "idle" as const }
     : pastedLink && status === "idle"
       ? { label: "Transcribe this link", icon: <PlayIcon className="size-10" />, onClick: runPastedLink, tone: "idle" as const }
       : {
@@ -463,9 +473,22 @@ export default function LiveTranscriber() {
           readOnly={status !== "idle"}
           interim={interimText}
           highlight={highlight}
-          placeholder="Tap to speak, upload media, or paste a link here"
+          placeholder={
+            importing ? (
+              <span className="inline-flex items-baseline">
+                {media.phase ?? "Transcribing"}
+                {[0, 1, 2].map((i) => (
+                  <span key={i} className="ml-0.5 animate-pulse" style={{ animationDelay: `${i * 250}ms` }}>
+                    .
+                  </span>
+                ))}
+              </span>
+            ) : (
+              "Tap to speak, upload media, or paste a link here"
+            )
+          }
           textareaRef={textareaRef}
-          maxHeightClass={sheet === "collapsed" ? "max-h-[72vh]" : "max-h-[38vh]"}
+          maxHeightClass={sheet === "collapsed" ? "max-h-[54vh]" : "max-h-[27vh]"}
           textClass={TEXT_SIZE_CLASS[textSize]}
         >
           {played && (
@@ -475,7 +498,6 @@ export default function LiveTranscriber() {
               onReady={(seek) => {
                 seekRef.current = seek;
               }}
-              onClose={closePlayer}
             />
           )}
         </TranscriptBox>
@@ -495,7 +517,7 @@ export default function LiveTranscriber() {
       >
         {/* Floats above the sheet, over the text, with a frosted background */}
         <div className="absolute -top-18 right-6 z-10">
-          <div className="flex items-center gap-1 rounded-full border border-neutral-200/60 bg-white/40 p-1 shadow-sm backdrop-blur-md dark:border-neutral-700/50 dark:bg-neutral-900/40">
+          <div className="flex items-center gap-1 rounded-full border border-neutral-200/60 bg-white/40 p-1.5 shadow-sm backdrop-blur-md dark:border-neutral-700/50 dark:bg-neutral-900/40">
             <button
               onClick={() => updateText("", "edit", "force")}
               disabled={!hasText || status !== "idle"}
@@ -551,14 +573,14 @@ export default function LiveTranscriber() {
           }`}
         >
           <div className="overflow-hidden">
-            <div className="mx-auto mb-12 flex w-full max-w-sm flex-col gap-3">
-              <div className="flex items-center justify-between gap-4 px-1 py-2">
-                <span className="text-base font-medium">Appearance</span>
+            <div className="mx-auto mb-10 flex w-full max-w-lg flex-col gap-4 pl-5">
+              <div className="flex items-center justify-between gap-4 px-2.5 py-1">
+                <span className="text-lg font-medium">Appearance</span>
                 <AppearancePicker />
               </div>
 
-              <div className="flex items-center justify-between gap-4 px-1 py-2">
-                <span className="text-base font-medium">Text size</span>
+              <div className="flex items-center justify-between gap-4 px-2.5 py-1">
+                <span className="text-lg font-medium">Text size</span>
                 <TextSizePicker />
               </div>
 
@@ -584,20 +606,13 @@ export default function LiveTranscriber() {
               sheet === "collapsed" ? "overflow-hidden" : "overflow-visible"
             }`}
           >
-        {status === "recording" && (
-          <span className="flex items-center gap-2 text-sm tabular-nums text-neutral-500">
-            <span className="size-2.5 animate-pulse rounded-full bg-red-500" />
-            {formatTime(elapsed)} / {formatTime(MAX_SECONDS)}
-          </span>
-        )}
-
         <LanguagePicker
           value={language}
           onChange={setLanguage}
           disabled={status !== "idle" || importing}
         />
 
-        <div className="flex items-center gap-5">
+        <div className="grid w-full grid-cols-3 items-center justify-items-center">
           <input
             ref={fileInputRef}
             type="file"
@@ -611,29 +626,71 @@ export default function LiveTranscriber() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={status !== "idle" || importing}
+            disabled={status !== "idle" || importing || played !== null}
             aria-label="Upload video or audio"
             title="Upload video or audio"
-            className="flex size-12 items-center justify-center rounded-full border border-neutral-300 transition hover:bg-neutral-100 active:scale-90 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            className="flex size-18 items-center justify-center rounded-full border border-neutral-300 transition hover:bg-neutral-100 active:scale-90 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
-            <UploadIcon className="size-5" />
+            <UploadIcon className="size-6" />
           </button>
 
-          <button
-            onClick={mainButton.onClick}
-            disabled={busy}
-            aria-label={mainButton.label}
-            title={mainButton.label}
-            className={`flex size-28 items-center justify-center rounded-full transition active:scale-95 disabled:opacity-60 ${
-              mainButton.tone === "recording"
-                ? "animate-pulse bg-red-600 text-white shadow-[0_0_0_10px_rgba(239,68,68,0.18),0_0_36px_10px_rgba(239,68,68,0.5)]"
-                : mainButton.tone === "busy"
-                  ? "border border-neutral-300 text-neutral-600 dark:border-neutral-700 dark:text-neutral-300"
-                  : "bg-foreground text-background shadow-lg hover:opacity-90"
-            }`}
-          >
-            {mainButton.icon}
-          </button>
+          <div className="relative flex size-32 items-center justify-center">
+            {/* Breathing glow behind the button; the button itself stays still */}
+            {mainButton.tone === "recording" && (
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-1 animate-pulse rounded-full bg-red-500/90 blur-xl"
+              />
+            )}
+
+            {/* Ring hugging the outside of the button, filling as the
+                10-minute limit runs down */}
+            {mainButton.tone === "recording" && (
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 100 100"
+                className="pointer-events-none absolute inset-0 -rotate-90"
+              >
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="46"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="5"
+                  className="text-red-500/25"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="46"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                  strokeDasharray={RING}
+                  strokeDashoffset={RING * (1 - Math.min(elapsed / MAX_SECONDS, 1))}
+                  className="text-red-500 transition-[stroke-dashoffset] duration-500 ease-linear"
+                />
+              </svg>
+            )}
+
+            <button
+              onClick={mainButton.onClick}
+              disabled={busy}
+              aria-label={mainButton.label}
+              title={mainButton.label}
+              className={`relative flex size-28 items-center justify-center rounded-full transition active:scale-95 disabled:opacity-60 ${
+                mainButton.tone === "recording"
+                  ? "bg-red-600 text-white"
+                  : mainButton.tone === "busy"
+                    ? "border border-neutral-300 text-neutral-600 dark:border-neutral-700 dark:text-neutral-300"
+                    : "bg-foreground text-background shadow-lg hover:opacity-90"
+              }`}
+            >
+              {mainButton.icon}
+            </button>
+          </div>
 
           {canShare ? (
             <button
@@ -642,21 +699,21 @@ export default function LiveTranscriber() {
               disabled={!hasText || status !== "idle"}
               aria-label={hasSelection ? "Share selection" : "Share transcript"}
               title={hasSelection ? "Share selection" : "Share transcript"}
-              className="flex size-12 items-center justify-center rounded-full border border-neutral-300 transition hover:bg-neutral-100 active:scale-90 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
+              className="flex size-18 items-center justify-center rounded-full border border-neutral-300 transition hover:bg-neutral-100 active:scale-90 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
             >
-              <ForwardIcon className="size-5" />
+              <ForwardIcon className="size-6" />
             </button>
           ) : (
             // No share sheet in this browser: keep the mic centred anyway
-            <span aria-hidden="true" className="size-12" />
+            <span aria-hidden="true" className="size-18" />
           )}
         </div>
 
-        {media.phase && (
-          <p className="flex items-center gap-2 text-center text-sm text-neutral-500" aria-live="polite">
-            <span className="size-3 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent" />
-            {media.phase}
-          </p>
+        {status === "recording" && (
+          <span className="-mt-6 flex items-center gap-2 text-sm tabular-nums text-neutral-500">
+            <span className="size-2.5 animate-pulse rounded-full bg-red-500" />
+            {formatTime(elapsed)}
+          </span>
         )}
           </div>
         </div>

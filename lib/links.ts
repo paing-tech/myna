@@ -13,8 +13,3 @@ export function findLink(text: string): { url: string; start: number; end: numbe
   }
   return found;
 }
-
-// The text with that link taken out, and the gap it left tidied up
-export function removeLink(text: string, start: number, end: number): string {
-  return `${text.slice(0, start)}${text.slice(end)}`.replace(/[ \t]{2,}/g, " ").trim();
-}

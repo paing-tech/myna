@@ -13,7 +13,9 @@ import { promisify } from "node:util";
 const run = promisify(execFile);
 
 export const MAX_MEDIA_SECONDS = 60 * 60; // Gemini's limit for one transcription
-export const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
+// Temp files live in RAM on Cloud Run, so the cap doubles as a memory budget
+export const MAX_UPLOAD_MB = 100;
+export const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 const MAX_CONCURRENT_JOBS = 2; // ffmpeg is CPU-heavy; keep a small server responsive
 
 // An error whose message is safe to show the user
@@ -56,7 +58,7 @@ export async function saveUpload(body: ReadableStream<Uint8Array>, dest: string)
     transform(chunk: Buffer, _encoding, callback) {
       bytes += chunk.length;
       if (bytes > MAX_UPLOAD_BYTES) {
-        callback(new MediaError("The file is larger than 500 MB.", 413));
+        callback(new MediaError(`The file is larger than ${MAX_UPLOAD_MB} MB.`, 413));
       } else {
         callback(null, chunk);
       }
@@ -112,7 +114,7 @@ export async function downloadLink(url: string, dir: string): Promise<string> {
         "--no-playlist",
         "--no-progress",
         "-f", "bestaudio/best",
-        "--max-filesize", "500M",
+        "--max-filesize", `${MAX_UPLOAD_MB}M`,
         "--match-filter", `duration <= ${MAX_MEDIA_SECONDS}`,
         "-o", path.join(dir, "download.%(ext)s"),
         "--", url,
@@ -132,7 +134,7 @@ export async function downloadLink(url: string, dir: string): Promise<string> {
 
   // yt-dlp exits successfully but writes nothing when --match-filter skips the video
   const file = (await readdir(dir)).find((f) => f.startsWith("download.") && !f.endsWith(".part"));
-  if (!file) throw new MediaError("That video is longer than 1 hour or too large (max 500 MB).");
+  if (!file) throw new MediaError(`That video is longer than 1 hour or too large (max ${MAX_UPLOAD_MB} MB).`);
   return path.join(dir, file);
 }
 
@@ -173,7 +175,7 @@ export async function extractAudio(input: string, dir: string): Promise<string> 
 // Files live in a temp folder, are served by /api/media/[id], and are deleted
 // an hour later.
 const PLAYBACK_DIR = path.join(tmpdir(), "myna-playback");
-const PLAYBACK_TTL_MS = 60 * 60 * 1000;
+const PLAYBACK_TTL_MS = 15 * 60 * 1000; // short, because these files sit in memory
 
 // Only formats a browser can play, and whose type we can state confidently
 const PLAYBACK_TYPES: Record<string, string> = {

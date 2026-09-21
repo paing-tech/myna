@@ -14,6 +14,7 @@ RUN npm run build
 # --- 3. Small runtime image with ffmpeg + yt-dlp ---
 FROM node:22-bookworm-slim AS run
 WORKDIR /app
+# Cloud Run overrides PORT at runtime; 3000 is just the local default
 ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0

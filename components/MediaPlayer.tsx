@@ -8,11 +8,10 @@ type Props = {
   result: TranscriptResult;
   onTime: (seconds: number) => void;
   onReady: (seek: (seconds: number) => void) => void;
-  onClose: () => void;
 };
 
 // Just the player. The transcript and its highlight live in TranscriptBox.
-export default function MediaPlayer({ result, onTime, onReady, onClose }: Props) {
+export default function MediaPlayer({ result, onTime, onReady }: Props) {
   const { mediaUrl, mediaKind, youtubeId } = result;
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const isYouTube = mediaKind === "youtube" && youtubeId;
@@ -31,7 +30,7 @@ export default function MediaPlayer({ result, onTime, onReady, onClose }: Props)
   );
 
   return (
-    <div className="flex flex-col gap-2">
+    <div>
       {isYouTube ? (
         <YouTubeEmbed videoId={youtubeId} onTime={onTime} onReady={onReady} />
       ) : mediaKind === "video" ? (
@@ -53,15 +52,6 @@ export default function MediaPlayer({ result, onTime, onReady, onClose }: Props)
         />
       )}
 
-      <div className="flex items-center justify-between text-xs text-neutral-500">
-        <span>Double-click a word to jump there</span>
-        <button
-          onClick={onClose}
-          className="rounded-full px-2 py-1 transition hover:bg-neutral-100 dark:hover:bg-neutral-800"
-        >
-          Close player
-        </button>
-      </div>
     </div>
   );
 }

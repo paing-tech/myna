@@ -2,6 +2,7 @@ import path from "node:path";
 import { toLanguageCodes } from "@/lib/languages";
 import {
   MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_MB,
   MediaError,
   errorResponse,
   extractAudio,
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
 
     const declaredSize = Number(request.headers.get("content-length") ?? 0);
     if (declaredSize > MAX_UPLOAD_BYTES) {
-      throw new MediaError("The file is larger than 500 MB.", 413);
+      throw new MediaError(`The file is larger than ${MAX_UPLOAD_MB} MB.`, 413);
     }
 
     // No playback copy here: the browser already has the file it uploaded

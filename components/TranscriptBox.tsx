@@ -10,7 +10,7 @@ type Props = {
   readOnly: boolean;
   interim?: string;
   highlight?: { start: number; end: number } | null;
-  placeholder: string;
+  placeholder: React.ReactNode;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   children?: React.ReactNode; // the player, shown above the text
   maxHeightClass?: string; // how tall the text may grow before it scrolls
@@ -78,7 +78,7 @@ export default function TranscriptBox({
 
   return (
     <div
-      className={`flex flex-col gap-3 bg-background transition-[border-radius,padding] ${
+      className={`flex flex-col gap-2 bg-background transition-[border-radius,padding] ${
         tall || children ? "rounded-[28px] p-6" : "rounded-full px-6 py-2.5"
       }`}
     >

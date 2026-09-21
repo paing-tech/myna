@@ -18,7 +18,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const headers: Record<string, string> = {
     "Content-Type": media.type,
     "Accept-Ranges": "bytes",
-    "Cache-Control": "private, max-age=3600",
+    "Cache-Control": "private, max-age=900",
   };
 
   // "bytes=1000-" or "bytes=1000-2000"

@@ -4,7 +4,8 @@ import { useRef, useState } from "react";
 import type { Language } from "@/lib/languages";
 import type { TranscriptResult } from "@/lib/types";
 
-const MAX_UPLOAD_BYTES = 500 * 1024 * 1024; // keep in sync with lib/media.ts
+const MAX_UPLOAD_MB = 100; // keep in sync with lib/media.ts
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
 type Options = {
   language: Language;
@@ -23,7 +24,7 @@ export function useMediaImport({ language, onResult, onError }: Options) {
 
   async function run(job: () => Promise<TranscriptResult>) {
     onError(null);
-    setPhase("Starting…");
+    setPhase("Transcribing");
     try {
       onResult(await job());
     } catch (err) {
@@ -48,7 +49,7 @@ export function useMediaImport({ language, onResult, onError }: Options) {
       xhr.upload.onprogress = (e) => {
         if (!e.lengthComputable) return;
         const percent = Math.round((e.loaded / e.total) * 100);
-        setPhase(percent < 100 ? `Uploading ${percent}%…` : "Transcribing… this can take a minute or two");
+        setPhase(percent < 100 ? `Uploading ${percent}%` : "Transcribing");
       };
       xhr.onload = () => {
         let data: Partial<TranscriptResult> & { error?: string } = {};
@@ -67,10 +68,10 @@ export function useMediaImport({ language, onResult, onError }: Options) {
   function pickFile(file: File | undefined) {
     if (!file) return;
     if (file.size > MAX_UPLOAD_BYTES) {
-      onError("The file is larger than 500 MB.");
+      onError(`The file is larger than ${MAX_UPLOAD_MB} MB.`);
       return;
     }
-    setPhase("Uploading 0%…");
+    setPhase("Uploading 0%");
     run(async () => {
       const result = await uploadFile(file);
       // The browser already has this file, so play it straight from memory
@@ -84,7 +85,7 @@ export function useMediaImport({ language, onResult, onError }: Options) {
 
   function transcribeLink(url: string) {
     if (!url.trim() || busy) return;
-    setPhase("Downloading and transcribing… this can take a minute or two");
+    setPhase("Fetching the link");
     run(async () => {
       const controller = new AbortController();
       abortRef.current = controller;
