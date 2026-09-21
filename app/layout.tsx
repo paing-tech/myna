@@ -21,6 +21,12 @@ const notoMyanmar = Noto_Sans_Myanmar({
 
 export const metadata: Metadata = {
   title: "Myna",
+  // Fixed paths, not Next's hashed ones: iOS caches the home-screen icon hard
+  // and is unreliable with query strings on apple-touch-icon
+  icons: {
+    icon: [{ url: "/favicon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
   description: "Speak Burmese or English and see it as text in real time.",
 };
 

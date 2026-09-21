@@ -707,12 +707,16 @@ export default function LiveTranscriber() {
               disabled={busy}
               aria-label={mainButton.label}
               title={mainButton.label}
-              className={`relative flex size-28 items-center justify-center rounded-full transition active:scale-95 disabled:opacity-60 ${
-                mainButton.tone === "recording"
-                  ? "bg-red-600 text-white"
-                  : mainButton.tone === "busy"
-                    ? "border border-neutral-300 text-neutral-600 dark:border-neutral-700 dark:text-neutral-300"
-                    : "bg-foreground text-background shadow-lg hover:opacity-90"
+              // A solid muted fill while busy, never opacity: the sheet is
+              // translucent, so a see-through button shows the text behind it
+              className={`relative flex size-28 items-center justify-center rounded-full transition active:scale-95 ${
+                busy
+                  ? "bg-foreground text-background shadow-lg" // solid, so the text behind can't show through
+                  : mainButton.tone === "recording"
+                    ? "bg-red-600 text-white"
+                    : mainButton.tone === "busy"
+                      ? "border border-neutral-300 bg-background text-neutral-600 dark:border-neutral-700 dark:text-neutral-300"
+                      : "bg-foreground text-background shadow-lg hover:opacity-90"
               }`}
             >
               {mainButton.icon}
