@@ -20,7 +20,7 @@ const notoMyanmar = Noto_Sans_Myanmar({
 });
 
 export const metadata: Metadata = {
-  title: "Myna — live Burmese transcription",
+  title: "Myna",
   description: "Speak Burmese or English and see it as text in real time.",
 };
 

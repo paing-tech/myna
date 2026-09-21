@@ -89,7 +89,10 @@ export default function TranscriptBox({
   const after = highlight ? value.slice(highlight.end) : "";
 
   return (
-    <div style={{ maxHeight }} className="flex min-h-0 flex-col gap-2 bg-background px-2 pt-2">
+    <div
+      style={{ maxHeight }}
+      className={`flex min-h-0 flex-col gap-2 bg-background px-2 pt-2 ${oneLine ? "pb-2" : ""}`}
+    >
       {children}
 
       {/* Height comes from the invisible sizer below: the box hugs short text
