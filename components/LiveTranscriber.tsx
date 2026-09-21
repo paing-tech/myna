@@ -496,14 +496,7 @@ export default function LiveTranscriber() {
           highlight={highlight}
           placeholder={
             importing ? (
-              <span className="inline-flex items-baseline">
-                {media.phase ?? "Transcribing"}
-                {[0, 1, 2].map((i) => (
-                  <span key={i} className="ml-0.5 animate-pulse" style={{ animationDelay: `${i * 250}ms` }}>
-                    .
-                  </span>
-                ))}
-              </span>
+              media.phase ?? "Transcribing"
             ) : (
               "Tap to speak, upload media, or paste a link here"
             )
@@ -537,8 +530,13 @@ export default function LiveTranscriber() {
             : "pb-[max(4rem,env(safe-area-inset-bottom))]"
         }  border-t border-neutral-200 bg-neutral-50/90 px-4 pt-2 shadow-[0_-10px_30px_rgba(0,0,0,0.07)] backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-900/80 dark:shadow-[0_-10px_30px_rgba(0,0,0,0.6)]`}
       >
-        {/* Floats above the sheet, over the text, with a frosted background */}
-        <div className="absolute -top-18 right-6 z-10">
+        {/* Floats above the sheet, over the text, with a frosted background.
+            Hidden entirely when none of its three buttons can do anything. */}
+        <div
+          className={`absolute -top-28 right-6 z-10 transition-opacity ${
+            hasText || canUndo ? "opacity-100" : "pointer-events-none opacity-0"
+          }`}
+        >
           <div className="flex items-center gap-1 rounded-full border border-neutral-200/60 bg-white/40 p-1.5 shadow-sm backdrop-blur-md dark:border-neutral-700/50 dark:bg-neutral-900/40">
             <button
               onClick={() => updateText("", "edit", "force")}

@@ -39,14 +39,17 @@ export default function TranscriptBox({
 }: Props) {
   const mirrorRef = useRef<HTMLDivElement | null>(null);
   const sizerRef = useRef<HTMLDivElement | null>(null);
-  // One line → a rounded pill like a search box; more → a panel with square-ish corners
-  const [tall, setTall] = useState(false);
+  // A single line reads better centred; once it wraps, centring is hard to read
+  const [oneLine, setOneLine] = useState(true);
 
   useEffect(() => {
     const sizer = sizerRef.current;
     if (!sizer) return;
     const observer = new ResizeObserver(([entry]) => {
-      setTall(entry.contentRect.height > 44); // taller than a single line
+      const lineHeight = parseFloat(getComputedStyle(sizer).lineHeight) || 1;
+      // the sizer carries a trailing newline, so one content line measures two
+      const lines = Math.round(entry.contentRect.height / lineHeight) - 1;
+      setOneLine(lines <= 1);
     });
     observer.observe(sizer);
     return () => observer.disconnect();
@@ -79,19 +82,14 @@ export default function TranscriptBox({
     syncScroll();
   });
 
-  const TEXT_STYLE = `${textClass} ${WRAP}`;
+  const TEXT_STYLE = `${textClass} ${WRAP} ${oneLine ? "text-center" : "text-left"}`;
 
   const before = highlight ? value.slice(0, highlight.start) : value;
   const marked = highlight ? value.slice(highlight.start, highlight.end) : "";
   const after = highlight ? value.slice(highlight.end) : "";
 
   return (
-    <div
-      style={{ maxHeight }}
-      className={`flex min-h-0 flex-col gap-2 bg-background transition-[border-radius,padding] ${
-        tall || children ? "rounded-[28px] px-2 pt-2" : "rounded-full px-6 py-2.5"
-      }`}
-    >
+    <div style={{ maxHeight }} className="flex min-h-0 flex-col gap-2 bg-background px-2 pt-2">
       {children}
 
       {/* Height comes from the invisible sizer below: the box hugs short text

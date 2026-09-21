@@ -15,12 +15,58 @@ type Options = {
 
 // Uploading and link transcription, without any markup: the input row and the
 // main button both drive this, so the state has to live above them.
+// How long the file's own length suggests transcription will take. Gemini
+// reports no progress, so the percentage is an estimate anchored to this.
+function expectedSeconds(mediaSeconds: number): number {
+  return mediaSeconds > 0 ? Math.max(6, mediaSeconds / 5) : 30;
+}
+
+// Read a file's duration without uploading it
+function mediaDuration(file: File): Promise<number> {
+  return new Promise((resolve) => {
+    const element = document.createElement(file.type.startsWith("video") ? "video" : "audio");
+    const url = URL.createObjectURL(file);
+    const finish = (seconds: number) => {
+      URL.revokeObjectURL(url);
+      resolve(Number.isFinite(seconds) ? seconds : 0);
+    };
+    element.preload = "metadata";
+    element.onloadedmetadata = () => finish(element.duration);
+    element.onerror = () => finish(0);
+    element.src = url;
+  });
+}
+
+type Timer = { current: ReturnType<typeof setInterval> | null };
+
+// A percentage that creeps towards 95% over the expected time, then waits
+// there for the real answer. Honest about being an estimate, not a fake clock.
+function runEstimate(seconds: number, setPhase: (text: string) => void, timer: Timer) {
+  clearEstimate(timer);
+  const startedAt = Date.now();
+  const tick = () => {
+    const elapsed = (Date.now() - startedAt) / 1000;
+    setPhase(`Transcribing ${Math.min(95, Math.round((elapsed / seconds) * 100))}%`);
+  };
+  tick();
+  timer.current = setInterval(tick, 400);
+}
+
+function clearEstimate(timer: Timer) {
+  if (timer.current) clearInterval(timer.current);
+  timer.current = null;
+}
+
 export function useMediaImport({ language, onResult, onError }: Options) {
   const [phase, setPhase] = useState<string | null>(null); // progress message; null = idle
   const xhrRef = useRef<XMLHttpRequest | null>(null);
+  const estimateRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const busy = phase !== null;
+
+  const startEstimate = (seconds: number) => runEstimate(seconds, setPhase, estimateRef);
+  const stopEstimate = () => clearEstimate(estimateRef);
 
   async function run(job: () => Promise<TranscriptResult>) {
     onError(null);
@@ -32,13 +78,14 @@ export function useMediaImport({ language, onResult, onError }: Options) {
       if (err instanceof DOMException && err.name === "AbortError") onError(null);
       else onError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
+      stopEstimate();
       xhrRef.current = null;
       abortRef.current = null;
       setPhase(null);
     }
   }
 
-  function uploadFile(file: File): Promise<TranscriptResult> {
+  function uploadFile(file: File, expected: number): Promise<TranscriptResult> {
     return new Promise((resolve, reject) => {
       // XHR instead of fetch: fetch can't report upload progress, and a big
       // video on a phone connection needs a progress number.
@@ -49,7 +96,8 @@ export function useMediaImport({ language, onResult, onError }: Options) {
       xhr.upload.onprogress = (e) => {
         if (!e.lengthComputable) return;
         const percent = Math.round((e.loaded / e.total) * 100);
-        setPhase(percent < 100 ? `Uploading ${percent}%` : "Transcribing");
+        if (percent < 100) setPhase(`Uploading ${percent}%`);
+        else startEstimate(expected); // the server has it now
       };
       xhr.onload = () => {
         let data: Partial<TranscriptResult> & { error?: string } = {};
@@ -73,7 +121,8 @@ export function useMediaImport({ language, onResult, onError }: Options) {
     }
     setPhase("Uploading 0%");
     run(async () => {
-      const result = await uploadFile(file);
+      const expected = expectedSeconds(await mediaDuration(file));
+      const result = await uploadFile(file, expected);
       // The browser already has this file, so play it straight from memory
       return {
         ...result,
@@ -85,7 +134,7 @@ export function useMediaImport({ language, onResult, onError }: Options) {
 
   function transcribeLink(url: string) {
     if (!url.trim() || busy) return;
-    setPhase("Fetching the link");
+    startEstimate(45); // download plus transcription, for a typical clip
     run(async () => {
       const controller = new AbortController();
       abortRef.current = controller;
