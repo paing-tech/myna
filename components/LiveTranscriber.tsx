@@ -94,6 +94,11 @@ export default function LiveTranscriber() {
   const [sheet, setSheet] = useState<"collapsed" | "default" | "expanded">("default");
   const dragStartRef = useRef<number | null>(null);
   const textSize = useTextSize();
+  const columnRef = useRef<HTMLDivElement | null>(null);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  // Measured, so the transcript can stop exactly on the sheet's top edge
+  const [sheetHeight, setSheetHeight] = useState(0);
+  const [columnHeight, setColumnHeight] = useState(0);
   const historyRef = useRef<string[]>([]); // previous versions, for undo
   const lastPushRef = useRef(0);
   const [canUndo, setCanUndo] = useState(false);
@@ -105,6 +110,21 @@ export default function LiveTranscriber() {
   const workletRef = useRef<AudioWorkletNode | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const finishTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // The sheet changes height with its three states, and the column changes
+  // with rotation and the on-screen keyboard
+  useEffect(() => {
+    const column = columnRef.current;
+    const sheetEl = sheetRef.current;
+    if (!column || !sheetEl) return;
+    const observer = new ResizeObserver(() => {
+      setColumnHeight(column.clientHeight);
+      setSheetHeight(sheetEl.offsetHeight);
+    });
+    observer.observe(column);
+    observer.observe(sheetEl);
+    return () => observer.disconnect();
+  }, []);
 
   // Leaving the page mid-recording must still release the mic and socket
   useEffect(() => {
@@ -450,7 +470,7 @@ export default function LiveTranscriber() {
         };
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col gap-4">
+    <div ref={columnRef} className="relative flex min-h-0 flex-1 flex-col">
       {error && (
         <p
           role="alert"
@@ -464,7 +484,8 @@ export default function LiveTranscriber() {
           it grows out from there, until it meets the buttons and scrolls. */}
       {/* Centred, so a short transcript sits in view above the sheet while a
           long one grows down behind it */}
-      <div className="mb-90 mt-auto flex flex-col gap-1">
+      {/* Bottom margin follows the sheet, so the box always stops on its edge */}
+      <div className="mt-auto flex min-h-0 flex-col gap-1" style={{ marginBottom: sheetHeight }}>
         <TranscriptBox
           value={finalText}
           onChange={(next) => updateText(next, "edit")}
@@ -488,7 +509,7 @@ export default function LiveTranscriber() {
             )
           }
           textareaRef={textareaRef}
-          maxHeightClass={sheet === "collapsed" ? "max-h-[54vh]" : "max-h-[27vh]"}
+          maxHeight={`${Math.max(columnHeight - sheetHeight, 80)}px`}
           textClass={TEXT_SIZE_CLASS[textSize]}
         >
           {played && (
@@ -506,6 +527,7 @@ export default function LiveTranscriber() {
 
       {/* Controls sit in a sheet anchored to the bottom of the screen */}
       <div
+        ref={sheetRef}
         {...(sheet === "collapsed"
           ? { onPointerDown: handlePointerDown, onPointerUp: handlePointerUp }
           : {})}
@@ -675,6 +697,13 @@ export default function LiveTranscriber() {
               </svg>
             )}
 
+            {status === "recording" && (
+              <span className="absolute -bottom-7 left-1/2 flex -translate-x-1/2 items-center gap-2 text-sm tabular-nums whitespace-nowrap text-neutral-500">
+                <span className="size-2.5 animate-pulse rounded-full bg-red-500" />
+                {formatTime(elapsed)}
+              </span>
+            )}
+
             <button
               onClick={mainButton.onClick}
               disabled={busy}
@@ -709,12 +738,6 @@ export default function LiveTranscriber() {
           )}
         </div>
 
-        {status === "recording" && (
-          <span className="-mt-6 flex items-center gap-2 text-sm tabular-nums text-neutral-500">
-            <span className="size-2.5 animate-pulse rounded-full bg-red-500" />
-            {formatTime(elapsed)}
-          </span>
-        )}
           </div>
         </div>
       </div>

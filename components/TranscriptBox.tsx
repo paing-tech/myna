@@ -13,7 +13,7 @@ type Props = {
   placeholder: React.ReactNode;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   children?: React.ReactNode; // the player, shown above the text
-  maxHeightClass?: string; // how tall the text may grow before it scrolls
+  maxHeight?: string; // the tallest the whole box may get, measured by the parent
   textClass?: string; // font size and line height, shared by both layers
 };
 
@@ -34,7 +34,7 @@ export default function TranscriptBox({
   placeholder,
   textareaRef,
   children,
-  maxHeightClass = "max-h-[55vh]",
+  maxHeight,
   textClass = "text-lg leading-loose",
 }: Props) {
   const mirrorRef = useRef<HTMLDivElement | null>(null);
@@ -59,6 +59,15 @@ export default function TranscriptBox({
     if (mirror && textarea) mirror.scrollTop = textarea.scrollTop;
   }
 
+  // While recording, follow the words as they arrive
+  useEffect(() => {
+    if (!readOnly) return;
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.scrollTop = textarea.scrollHeight;
+    syncScroll();
+  });
+
   // Keep the highlighted word in view while playing
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -78,15 +87,16 @@ export default function TranscriptBox({
 
   return (
     <div
-      className={`flex flex-col gap-2 bg-background transition-[border-radius,padding] ${
-        tall || children ? "rounded-[28px] p-6" : "rounded-full px-6 py-2.5"
+      style={{ maxHeight }}
+      className={`flex min-h-0 flex-col gap-2 bg-background transition-[border-radius,padding] ${
+        tall || children ? "rounded-[28px] px-2 pt-2" : "rounded-full px-6 py-2.5"
       }`}
     >
       {children}
 
       {/* Height comes from the invisible sizer below: the box hugs short text
           and grows with long text, up to max-h, after which the text scrolls. */}
-      <div className={`relative ${maxHeightClass} min-h-9 overflow-hidden transition-[max-height] duration-300`}>
+      <div className="relative min-h-9 flex-1 overflow-hidden">
         <div ref={sizerRef} aria-hidden="true" className={`${TEXT_STYLE} invisible`}>
           {value || placeholder}
           {interim}
